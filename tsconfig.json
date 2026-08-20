@@ -1,0 +1,16 @@
+{
+  "extends": "./config/typescript/node.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "files": ["vitest.config.ts"],
+  "references": [
+    { "path": "./packages/config" },
+    { "path": "./packages/shared" },
+    { "path": "./packages/tokenizer" },
+    { "path": "./packages/search-core" },
+    { "path": "./packages/recommendation-core" },
+    { "path": "./apps/api" },
+    { "path": "./apps/crawler" }
+  ]
+}
