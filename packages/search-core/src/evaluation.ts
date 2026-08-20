@@ -33,26 +33,52 @@ export interface EvaluationConfiguration {
   readonly search?: SearchOptions;
 }
 
-export function precisionAtK(retrieved: readonly string[], relevant: Readonly<Record<string, number>>, k: number): number {
+export function precisionAtK(
+  retrieved: readonly string[],
+  relevant: Readonly<Record<string, number>>,
+  k: number,
+): number {
   if (k <= 0) return 0;
   return retrieved.slice(0, k).filter((id) => (relevant[id] ?? 0) > 0).length / k;
 }
-export function recallAtK(retrieved: readonly string[], relevant: Readonly<Record<string, number>>, k: number): number {
+export function recallAtK(
+  retrieved: readonly string[],
+  relevant: Readonly<Record<string, number>>,
+  k: number,
+): number {
   const totalRelevant = Object.values(relevant).filter((grade) => grade > 0).length;
   if (totalRelevant === 0) return 0;
   return retrieved.slice(0, k).filter((id) => (relevant[id] ?? 0) > 0).length / totalRelevant;
 }
-export function reciprocalRank(retrieved: readonly string[], relevant: Readonly<Record<string, number>>): number {
+export function reciprocalRank(
+  retrieved: readonly string[],
+  relevant: Readonly<Record<string, number>>,
+): number {
   const position = retrieved.findIndex((id) => (relevant[id] ?? 0) > 0);
   return position < 0 ? 0 : 1 / (position + 1);
 }
-export function dcgAtK(retrieved: readonly string[], relevant: Readonly<Record<string, number>>, k: number): number {
-  return retrieved.slice(0, k).reduce((score, id, index) => score + (2 ** (relevant[id] ?? 0) - 1) / Math.log2(index + 2), 0);
+export function dcgAtK(
+  retrieved: readonly string[],
+  relevant: Readonly<Record<string, number>>,
+  k: number,
+): number {
+  return retrieved
+    .slice(0, k)
+    .reduce((score, id, index) => score + (2 ** (relevant[id] ?? 0) - 1) / Math.log2(index + 2), 0);
 }
-export function ndcgAtK(retrieved: readonly string[], relevant: Readonly<Record<string, number>>, k: number): number {
+export function ndcgAtK(
+  retrieved: readonly string[],
+  relevant: Readonly<Record<string, number>>,
+  k: number,
+): number {
   const actual = dcgAtK(retrieved, relevant, k);
-  const idealGrades = Object.values(relevant).sort((left, right) => right - left).slice(0, k);
-  const ideal = idealGrades.reduce((score, grade, index) => score + (2 ** grade - 1) / Math.log2(index + 2), 0);
+  const idealGrades = Object.values(relevant)
+    .sort((left, right) => right - left)
+    .slice(0, k);
+  const ideal = idealGrades.reduce(
+    (score, grade, index) => score + (2 ** grade - 1) / Math.log2(index + 2),
+    0,
+  );
   return ideal === 0 ? 0 : actual / ideal;
 }
 
@@ -65,7 +91,9 @@ export function evaluateConfigurations(
     const index = new SearchIndex(configuration.index);
     index.addDocuments(dataset.documents);
     const queries = dataset.queries.map((judgment): QueryEvaluation => {
-      const retrieved = index.search(judgment.query, { limit: k, ...configuration.search }).results.map((hit) => hit.documentId);
+      const retrieved = index
+        .search(judgment.query, { limit: k, ...configuration.search })
+        .results.map((hit) => hit.documentId);
       return {
         query: judgment.query,
         precisionAtK: precisionAtK(retrieved, judgment.relevantDocuments, k),
@@ -89,9 +117,21 @@ export function evaluateConfigurations(
 
 export function formatEvaluationTable(results: readonly EvaluationResult[]): string {
   const rows = [['Configuration', 'P@K', 'R@K', 'MRR', 'NDCG@K']];
-  for (const result of results) rows.push([result.name, result.meanPrecisionAtK.toFixed(4), result.meanRecallAtK.toFixed(4), result.meanReciprocalRank.toFixed(4), result.meanNdcgAtK.toFixed(4)]);
-  const widths = rows[0]?.map((_, column) => Math.max(...rows.map((row) => row[column]?.length ?? 0))) ?? [];
-  return rows.map((row) => row.map((cell, column) => cell.padEnd(widths[column] ?? 0)).join('  ')).join('\n');
+  for (const result of results)
+    rows.push([
+      result.name,
+      result.meanPrecisionAtK.toFixed(4),
+      result.meanRecallAtK.toFixed(4),
+      result.meanReciprocalRank.toFixed(4),
+      result.meanNdcgAtK.toFixed(4),
+    ]);
+  const widths =
+    rows[0]?.map((_, column) => Math.max(...rows.map((row) => row[column]?.length ?? 0))) ?? [];
+  return rows
+    .map((row) => row.map((cell, column) => cell.padEnd(widths[column] ?? 0)).join('  '))
+    .join('\n');
 }
 
-function mean(values: readonly number[]): number { return values.length === 0 ? 0 : values.reduce((sum, value) => sum + value, 0) / values.length; }
+function mean(values: readonly number[]): number {
+  return values.length === 0 ? 0 : values.reduce((sum, value) => sum + value, 0) / values.length;
+}
