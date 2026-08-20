@@ -3,13 +3,27 @@ import { loadApiEnvironment } from '@seekr/config';
 import { buildApp } from './app.js';
 import { createCache } from './cache/client.js';
 import { createDatabase } from './database/client.js';
+import { PostgresCatalogStore } from './services/catalog-store.js';
+import { PostgresApiKeyRepository } from './services/api-key-repository.js';
+import { ApiKeyService } from './services/api-key-service.js';
+import { PostgresAnalyticsRepository } from './services/analytics-repository.js';
+import { AnalyticsService } from './services/analytics-service.js';
+import { InMemoryIndexService } from './services/index-service.js';
+import { PostgresCrawlRepository } from './services/crawl-repository.js';
+import { IndexManagementService } from './services/index-management.js';
 
 const environment = loadApiEnvironment();
 const database = createDatabase(environment.DATABASE_URL);
 const cache = createCache(environment.REDIS_URL);
+const indexes = new InMemoryIndexService();
+const crawls = new PostgresCrawlRepository(database);
+const indexManagement = new IndexManagementService(new PostgresCatalogStore(database), indexes);
+const apiKeys = new ApiKeyService(new PostgresApiKeyRepository(database));
+const analytics = new AnalyticsService(new PostgresAnalyticsRepository(database));
+await indexManagement.initialize();
 
 const app = await buildApp({
-  dependencies: { cache, database },
+  dependencies: { analytics, apiKeys, cache, crawls, database, indexManagement, indexes },
   environment,
   logger: {
     level: environment.LOG_LEVEL,

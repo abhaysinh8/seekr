@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import cors from '@fastify/cors';
 import sensible from '@fastify/sensible';
 import Fastify from 'fastify';
@@ -5,12 +7,31 @@ import type { FastifyError, FastifyServerOptions } from 'fastify';
 
 import type { ApiEnvironment } from '@seekr/config';
 
+import { createAuthenticationHook } from './auth/authentication.js';
+import { HttpError } from './errors/http-error.js';
+import { apiKeyRoutes } from './routes/api-keys.js';
+import { analyticsRoutes } from './routes/analytics.js';
+import { crawlRoutes } from './routes/crawl.js';
+import { indexRoutes } from './routes/indexes.js';
+import { searchRoutes } from './routes/search.js';
+import { InMemoryCatalogStore } from './services/catalog-store.js';
+import { InMemoryAnalyticsRepository } from './services/analytics-repository.js';
+import { AnalyticsService } from './services/analytics-service.js';
+import type { ApiKeyService } from './services/api-key-service.js';
+import { InMemoryCrawlRepository, type CrawlRepository } from './services/crawl-repository.js';
+import { IndexManagementService } from './services/index-management.js';
+import { InMemoryIndexService, type IndexService } from './services/index-service.js';
 import type { HealthDependency } from './services/health-dependency.js';
 import { healthRoutes } from './routes/health.js';
 
 export interface AppDependencies {
   readonly database: HealthDependency;
   readonly cache: HealthDependency;
+  readonly indexes?: IndexService;
+  readonly crawls?: CrawlRepository;
+  readonly indexManagement?: IndexManagementService;
+  readonly apiKeys?: ApiKeyService;
+  readonly analytics?: AnalyticsService;
 }
 
 export interface BuildAppOptions {
@@ -21,6 +42,8 @@ export interface BuildAppOptions {
 
 export async function buildApp(options: BuildAppOptions) {
   const app = Fastify({
+    bodyLimit: 1024 * 1024,
+    genReqId: () => randomUUID(),
     logger: options.logger ?? false,
     requestIdHeader: 'x-request-id',
   });
@@ -31,24 +54,58 @@ export async function buildApp(options: BuildAppOptions) {
     origin: options.environment.CORS_ORIGIN,
   });
 
-  await app.register(healthRoutes, options.dependencies);
-
-  app.setNotFoundHandler(async (request, reply) => {
-    await reply.status(404).send({
-      error: 'Not Found',
-      message: `Route ${request.method} ${request.url} does not exist`,
-      statusCode: 404,
-    });
+  app.addHook('onRequest', async (request, reply) => {
+    reply.header('x-request-id', request.id);
   });
+
+  app.decorateRequest('auth', null);
+  if (options.dependencies.apiKeys !== undefined) {
+    app.addHook('preHandler', createAuthenticationHook(options.dependencies.apiKeys));
+  }
+
+  const indexes = options.dependencies.indexes ?? new InMemoryIndexService();
+  const indexManagement =
+    options.dependencies.indexManagement ??
+    new IndexManagementService(new InMemoryCatalogStore(), indexes);
+  const analytics =
+    options.dependencies.analytics ?? new AnalyticsService(new InMemoryAnalyticsRepository());
 
   app.setErrorHandler(async (error: FastifyError, request, reply) => {
     request.log.error({ err: error }, 'Request failed');
-    const statusCode = error.statusCode ?? 500;
+    const isHttpError = error instanceof HttpError;
+    const statusCode = isHttpError ? error.statusCode : (error.statusCode ?? 500);
 
     await reply.status(statusCode).send({
+      code: isHttpError ? error.code : (error.code ?? 'INTERNAL_ERROR'),
       error: statusCode >= 500 ? 'Internal Server Error' : error.name,
       message: statusCode >= 500 ? 'An unexpected error occurred' : error.message,
+      requestId: request.id,
       statusCode,
+      ...(isHttpError && error.details !== undefined ? { details: error.details } : {}),
+    });
+  });
+
+  await app.register(healthRoutes, options.dependencies);
+  if (options.dependencies.apiKeys !== undefined) {
+    await app.register(apiKeyRoutes, { apiKeys: options.dependencies.apiKeys });
+  }
+  await app.register(analyticsRoutes, { analytics });
+  await app.register(crawlRoutes, {
+    crawls: options.dependencies.crawls ?? new InMemoryCrawlRepository(),
+  });
+  await app.register(indexRoutes, { management: indexManagement });
+  await app.register(searchRoutes, {
+    indexes,
+    analytics,
+  });
+
+  app.setNotFoundHandler(async (request, reply) => {
+    await reply.status(404).send({
+      code: 'ROUTE_NOT_FOUND',
+      error: 'Not Found',
+      message: `Route ${request.method} ${request.url} does not exist`,
+      requestId: request.id,
+      statusCode: 404,
     });
   });
 

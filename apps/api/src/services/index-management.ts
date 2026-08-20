@@ -1,0 +1,170 @@
+import type {
+  AddDocumentApiRequest,
+  CreateIndexApiRequest,
+  CreateProjectApiRequest,
+  IndexSchemaConfigurationApi,
+} from '@seekr/shared';
+
+import { HttpError } from '../errors/http-error.js';
+import type { CatalogStore, ManagedIndexRecord } from './catalog-store.js';
+import type { IndexService } from './index-service.js';
+
+export class IndexManagementService {
+  constructor(
+    private readonly store: CatalogStore,
+    private readonly engine: IndexService,
+  ) {}
+
+  async initialize(): Promise<void> {
+    for (const index of await this.store.listIndexes()) {
+      this.engine.createIndex(index.id, toEngineConfiguration(index.schema));
+      const documents = await this.store.listDocuments(index.id);
+      this.engine.addDocuments(index.id, documents.map(toSearchDocument));
+    }
+  }
+
+  createProject(input: CreateProjectApiRequest) {
+    return this.store.createProject(input);
+  }
+
+  async createIndex(input: CreateIndexApiRequest) {
+    const index = await this.store.createIndex(input);
+    try {
+      this.engine.createIndex(index.id, toEngineConfiguration(index.schema));
+      return this.summarize(index);
+    } catch (error) {
+      await this.store.deleteIndex(index.id);
+      throw error;
+    }
+  }
+
+  async listIndexes(projectId?: string) {
+    return (await this.store.listIndexes(projectId)).map((index) => this.summarize(index));
+  }
+
+  async getIndex(indexId: string) {
+    const index = await this.requiredIndex(indexId);
+    return this.summarize(index);
+  }
+
+  async deleteIndex(indexId: string): Promise<void> {
+    if (!(await this.store.deleteIndex(indexId))) throw notFound('Index', indexId);
+    this.engine.deleteIndex(indexId);
+  }
+
+  async updateSchema(indexId: string, schema: IndexSchemaConfigurationApi) {
+    await this.requiredIndex(indexId);
+    const documents = await this.store.listDocuments(indexId);
+    for (const document of documents) validateDocument(schema, document);
+    const updated = await this.store.updateIndexSchema(indexId, schema);
+    if (updated === undefined) throw notFound('Index', indexId);
+    this.engine.deleteIndex(indexId);
+    this.engine.createIndex(indexId, toEngineConfiguration(schema));
+    this.engine.addDocuments(indexId, documents.map(toSearchDocument));
+    return {
+      index: this.summarize(updated),
+      reindexRequired: documents.length > 0,
+      reindexedDocuments: documents.length,
+    };
+  }
+
+  async reindex(indexId: string) {
+    const index = await this.requiredIndex(indexId);
+    const documents = await this.store.listDocuments(indexId);
+    this.engine.deleteIndex(indexId);
+    this.engine.createIndex(indexId, toEngineConfiguration(index.schema));
+    this.engine.addDocuments(indexId, documents.map(toSearchDocument));
+    return { reindexedDocuments: documents.length };
+  }
+
+  async listDocuments(indexId: string, limit: number, offset: number) {
+    await this.requiredIndex(indexId);
+    const [documents, total] = await Promise.all([
+      this.store.listDocuments(indexId, limit, offset),
+      this.store.countDocuments(indexId),
+    ]);
+    return { documents, total, limit, offset };
+  }
+
+  async addDocuments(indexId: string, documents: readonly AddDocumentApiRequest[]) {
+    const index = await this.requiredIndex(indexId);
+    for (const document of documents) validateDocument(index.schema, document);
+    await this.store.upsertDocuments(indexId, documents);
+    this.engine.addDocuments(indexId, documents.map(toSearchDocument));
+    return { indexed: documents.length };
+  }
+
+  async deleteDocument(indexId: string, documentId: string): Promise<void> {
+    await this.requiredIndex(indexId);
+    if (!(await this.store.deleteDocument(indexId, documentId)))
+      throw notFound('Document', documentId);
+    this.engine.removeDocument(indexId, documentId);
+  }
+
+  private summarize(index: ManagedIndexRecord) {
+    const statistics = this.engine.getStatistics(index.id);
+    return {
+      ...index,
+      documentCount: statistics.documentCount,
+      termCount: statistics.vocabularySize,
+      storageSizeBytes: null,
+    };
+  }
+
+  private async requiredIndex(indexId: string): Promise<ManagedIndexRecord> {
+    const index = await this.store.getIndex(indexId);
+    if (index === undefined) throw notFound('Index', indexId);
+    return index;
+  }
+}
+
+function toEngineConfiguration(schema: IndexSchemaConfigurationApi) {
+  return {
+    fields: Object.fromEntries(
+      Object.entries(schema.fields).map(([name, field]) => [
+        name,
+        {
+          searchable: field.searchable,
+          filterable: field.filterable,
+          facetable: field.facetable,
+          sortable: field.sortable,
+          weight: field.weight,
+        },
+      ]),
+    ),
+  };
+}
+
+function toSearchDocument(document: AddDocumentApiRequest) {
+  return { id: document.id, fields: document.fields, metadata: document.metadata };
+}
+
+function validateDocument(
+  schema: IndexSchemaConfigurationApi,
+  document: AddDocumentApiRequest,
+): void {
+  for (const [name, value] of Object.entries(document.fields)) {
+    const field = schema.fields[name];
+    if (field === undefined)
+      throw new HttpError(400, 'UNKNOWN_FIELD', `Field ${name} is not defined in the index schema`);
+    const values = Array.isArray(value) ? value : [value];
+    for (const entry of values) {
+      if (entry === null) continue;
+      const valid =
+        (field.type === 'number' && typeof entry === 'number') ||
+        (field.type === 'boolean' && typeof entry === 'boolean') ||
+        ((field.type === 'text' || field.type === 'string' || field.type === 'date') &&
+          typeof entry === 'string');
+      if (!valid)
+        throw new HttpError(
+          400,
+          'FIELD_TYPE_MISMATCH',
+          `Field ${name} must contain ${field.type} values`,
+        );
+    }
+  }
+}
+
+function notFound(entity: string, id: string): HttpError {
+  return new HttpError(404, 'NOT_FOUND', `${entity} ${id} was not found`);
+}

@@ -1,34 +1,16 @@
-import pino from 'pino';
-
-import { loadCrawlerEnvironment } from '@seekr/config';
-
-const environment = loadCrawlerEnvironment();
-const logger = pino(
-  environment.NODE_ENV === 'development'
-    ? {
-        level: environment.LOG_LEVEL,
-        transport: {
-          options: { colorize: true, ignore: 'pid,hostname' },
-          target: 'pino-pretty',
-        },
-      }
-    : { level: environment.LOG_LEVEL },
-);
-
-logger.info(
-  { service: 'seekr-crawler' },
-  'Crawler runtime initialized; job processing is reserved for the crawler milestone',
-);
-
-const heartbeat = setInterval(() => {
-  logger.debug({ service: 'seekr-crawler' }, 'Crawler runtime waiting for job processors');
-}, 60_000);
-
-const shutdown = (signal: NodeJS.Signals) => {
-  clearInterval(heartbeat);
-  logger.info({ signal }, 'Shutting down crawler');
-  process.exit(0);
-};
-
-process.once('SIGINT', () => shutdown('SIGINT'));
-process.once('SIGTERM', () => shutdown('SIGTERM'));
+export { WebCrawler } from './crawler.js';
+export { extractPageContent } from './extraction.js';
+export { HttpPageFetcher } from './fetcher.js';
+export { RobotsPolicy, RobotsTxtCache } from './robots.js';
+export { isAllowedDomain, isPrivateNetworkUrl, normalizeUrl } from './url.js';
+export type {
+  CrawlConfiguration,
+  CrawledDocument,
+  CrawlJobResult,
+  CrawlJobStatus,
+  CrawlProgress,
+  CrawlRequest,
+  ExtractedPage,
+  PageFetcher,
+  PageIndexSink,
+} from './types.js';
