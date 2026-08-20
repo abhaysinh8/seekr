@@ -1,21 +1,22 @@
-/** Input contract for search strategies. Algorithms intentionally arrive in the next milestone. */
-export interface SearchRequest {
-  readonly indexId: string;
-  readonly query: string;
-  readonly limit: number;
-}
-
-export interface SearchHit<TDocument = Readonly<Record<string, unknown>>> {
-  readonly document: TDocument;
-  readonly score: number;
-}
-
-export interface SearchResult<TDocument = Readonly<Record<string, unknown>>> {
-  readonly hits: readonly SearchHit<TDocument>[];
-  readonly total: number;
-  readonly tookMs: number;
-}
-
-export interface SearchEngine<TDocument = Readonly<Record<string, unknown>>> {
-  search(request: SearchRequest): Promise<SearchResult<TDocument>>;
-}
+export { escapeHtml, highlightField } from './highlight.js';
+export { MinHeap, selectTopK, type Comparator } from './heap.js';
+export { InMemoryInvertedIndex } from './inverted-index.js';
+export { defaultMaximumEditDistance, levenshteinDistance } from './levenshtein.js';
+export { parseQuery, type ParsedPhrase, type ParsedQuery } from './query-parser.js';
+export {
+  BM25RankingStrategy,
+  inverseDocumentFrequency,
+  smoothedInverseDocumentFrequency,
+  TFIDFRankingStrategy,
+  type BM25Options,
+  type RankingInput,
+  type RankingScore,
+  type RankingStrategy,
+} from './ranking.js';
+export { SearchIndex } from './search-engine.js';
+export { FileSystemSegmentStore } from './segments/file-system-store.js';
+export { ImmutableSegmentIndex } from './segments/immutable-segment-index.js';
+export { MemorySegmentStore } from './segments/memory-store.js';
+export type * from './segments/types.js';
+export { Trie } from './trie.js';
+export type * from './types.js';

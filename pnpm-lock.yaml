@@ -209,7 +209,17 @@ importers:
         version: 5.9.3
 
   packages/search-core:
+    dependencies:
+      '@seekr/tokenizer':
+        specifier: workspace:*
+        version: link:../tokenizer
     devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.2.0
+      tsx:
+        specifier: 'catalog:'
+        version: 4.23.12
       typescript:
         specifier: 'catalog:'
         version: 5.9.3

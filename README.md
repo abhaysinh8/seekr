@@ -2,7 +2,7 @@
 
 Seekr is an open-source, self-hosted search and recommendation engine built from first principles. It is designed for developers who want to run search infrastructure locally or deploy it without handing indexing, ranking, or recommendation logic to a hosted search provider.
 
-> **Project status:** bootstrap and shared tokenizer milestones complete. Indexing, ranking, and recommendation algorithms are deliberately not implemented yet.
+> **Project status:** lexical search-core and shared tokenizer milestones complete. Recommendation algorithms and public indexing/search APIs are not implemented yet.
 
 ## What exists today
 
@@ -17,6 +17,7 @@ Seekr is an open-source, self-hosted search and recommendation engine built from
 - ESLint, Prettier, strict TypeScript, Vitest, and build orchestration
 - isolated package boundaries for tokenization, search, and recommendation algorithms
 - dependency-free, Unicode-aware tokenizer with source offsets, stop words, stemming hooks, and n-grams
+- from-scratch inverted index with BM25/TF-IDF ranking, field weights, filters/facets, autocomplete, fuzzy and phrase search, highlighting, explanations, and immutable segments
 
 No Elasticsearch, OpenSearch, Algolia, Meilisearch, Typesense, Solr, hosted search API, vector database, or external embedding service is used.
 
@@ -38,7 +39,7 @@ seekr/
 ├── packages/
 │   ├── config/               # validated runtime configuration
 │   ├── recommendation-core/  # recommendation algorithm boundary
-│   ├── search-core/          # search algorithm boundary
+│   ├── search-core/          # lexical indexing and ranking engine
 │   ├── shared/               # shared schemas and transport types
 │   └── tokenizer/            # shared indexing/query text pipeline
 ├── docker-compose.yml
@@ -118,12 +119,12 @@ See [Architecture](docs/architecture.md) and [Development guide](docs/developmen
 
 ## Next milestone
 
-Build the lexical indexing core in small, correctness-first increments, reusing the completed tokenizer for both documents and queries:
+Connect the completed lexical core to durable application workflows:
 
-1. in-memory inverted index and posting lists
-2. document add, update, and delete semantics
-3. Boolean/top-K retrieval with deterministic tests
-4. TF-IDF followed by BM25 ranking benchmarks
+1. project/index/document API services and validation
+2. PostgreSQL document catalog and segment lifecycle integration
+3. background reindex and compaction jobs
+4. Search Playground integration using highlights and explanations
 
 Persistence and public document/search APIs should follow once the core contracts and correctness suite are stable.
 

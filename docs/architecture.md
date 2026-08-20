@@ -11,7 +11,7 @@ Seekr is a TypeScript monorepo with runtime applications under `apps/` and reusa
 ## Core packages
 
 - `packages/tokenizer`: dependency-free Unicode normalization, tokenization, source offsets, stop-word filtering, stemming strategy hooks, and n-grams shared by indexing and querying.
-- `packages/search-core`: retrieval contracts. Inverted indexes, posting lists, and ranking remain isolated here.
+- `packages/search-core`: in-memory and immutable-segment inverted indexes, postings, BM25/TF-IDF ranking, field-aware retrieval, filters/facets, autocomplete, typo tolerance, phrases, highlighting, and explanations.
 - `packages/recommendation-core`: recommendation contracts and future in-process algorithms.
 - `packages/shared`: transport-safe schemas and types shared across applications.
 - `packages/config`: fail-fast environment parsing for backend processes.

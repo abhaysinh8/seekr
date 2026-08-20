@@ -12,14 +12,21 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
   "scripts": {
+    "benchmark": "tsx src/benchmarks/search.bench.ts",
     "build": "tsc -b",
     "clean": "rimraf dist tsconfig.tsbuildinfo",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "@seekr/tokenizer": "workspace:*"
+  },
   "devDependencies": {
+    "@types/node": "catalog:",
+    "tsx": "catalog:",
     "typescript": "catalog:"
   }
 }
