@@ -15,6 +15,7 @@
     "@fastify/cors": "catalog:",
     "@fastify/sensible": "catalog:",
     "@seekr/config": "workspace:*",
+    "@seekr/recommendation-core": "workspace:*",
     "@seekr/search-core": "workspace:*",
     "@seekr/shared": "workspace:*",
     "@seekr/tokenizer": "workspace:*",

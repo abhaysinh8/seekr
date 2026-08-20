@@ -1,4 +1,12 @@
 export {
+  recommendationItemParametersSchema,
+  recommendationQuerySchema,
+  recommendationUserParametersSchema,
+  recordInteractionRequestSchema,
+  type RecommendationQuery,
+  type RecordInteractionApiRequest,
+} from './recommendation-api.js';
+export {
   analyticsRangeQuerySchema,
   clickEventRequestSchema,
   type AnalyticsRangeQuery,

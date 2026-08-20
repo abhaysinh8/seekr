@@ -11,6 +11,7 @@
     "pnpm": ">=11.0.0"
   },
   "scripts": {
+    "benchmark": "pnpm --filter @seekr/search-core benchmark",
     "build": "turbo run build",
     "clean": "turbo run clean && rimraf coverage .turbo",
     "dev": "turbo run dev --parallel",

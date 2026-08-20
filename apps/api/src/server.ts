@@ -2,6 +2,8 @@ import { loadApiEnvironment } from '@seekr/config';
 
 import { buildApp } from './app.js';
 import { createCache } from './cache/client.js';
+import { SearchResponseCache } from './cache/search-cache.js';
+import { RedisCacheStore, ResilientCacheStore } from './cache/store.js';
 import { createDatabase } from './database/client.js';
 import { PostgresCatalogStore } from './services/catalog-store.js';
 import { PostgresApiKeyRepository } from './services/api-key-repository.js';
@@ -11,19 +13,39 @@ import { AnalyticsService } from './services/analytics-service.js';
 import { InMemoryIndexService } from './services/index-service.js';
 import { PostgresCrawlRepository } from './services/crawl-repository.js';
 import { IndexManagementService } from './services/index-management.js';
+import { PostgresInteractionRepository } from './services/interaction-repository.js';
+import { RecommendationService } from './services/recommendation-service.js';
 
 const environment = loadApiEnvironment();
 const database = createDatabase(environment.DATABASE_URL);
 const cache = createCache(environment.REDIS_URL);
 const indexes = new InMemoryIndexService();
 const crawls = new PostgresCrawlRepository(database);
-const indexManagement = new IndexManagementService(new PostgresCatalogStore(database), indexes);
+const catalogStore = new PostgresCatalogStore(database);
+const interactionRepository = new PostgresInteractionRepository(database);
+const recommendations = new RecommendationService(interactionRepository);
+const indexManagement = new IndexManagementService(catalogStore, indexes, recommendations);
 const apiKeys = new ApiKeyService(new PostgresApiKeyRepository(database));
 const analytics = new AnalyticsService(new PostgresAnalyticsRepository(database));
+const searchCache = new SearchResponseCache(
+  new ResilientCacheStore(new RedisCacheStore(cache.client)),
+);
 await indexManagement.initialize();
+for (const index of await catalogStore.listIndexes())
+  await recommendations.loadInteractions(index.id);
 
 const app = await buildApp({
-  dependencies: { analytics, apiKeys, cache, crawls, database, indexManagement, indexes },
+  dependencies: {
+    analytics,
+    apiKeys,
+    cache,
+    crawls,
+    database,
+    indexManagement,
+    indexes,
+    recommendations,
+    searchCache,
+  },
   environment,
   logger: {
     level: environment.LOG_LEVEL,

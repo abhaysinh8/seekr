@@ -16,7 +16,7 @@
     "README.md"
   ],
   "scripts": {
-    "benchmark": "tsx src/benchmarks/search.bench.ts",
+    "benchmark": "tsx src/benchmarks/performance.bench.ts",
     "build": "tsc -b",
     "clean": "rimraf dist tsconfig.tsbuildinfo",
     "typecheck": "tsc --noEmit"

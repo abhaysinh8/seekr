@@ -14,6 +14,7 @@ export interface IndexSearchService {
   search(indexId: string, query: string, options: SearchOptions): SearchResponse;
   autocomplete(indexId: string, prefix: string, options: AutocompleteOptions): readonly string[];
   getDocument(indexId: string, documentId: string): SearchDocument | undefined;
+  getGeneration(indexId: string): number;
 }
 
 export interface IndexService extends IndexSearchService {
@@ -27,29 +28,36 @@ export interface IndexService extends IndexSearchService {
 
 export class InMemoryIndexService implements IndexService {
   readonly #indexes = new Map<string, SearchIndex>();
+  readonly #generations = new Map<string, number>();
 
   public createIndex(indexId: string, configuration: IndexConfiguration = {}): SearchIndex {
     if (this.#indexes.has(indexId))
       throw new HttpError(409, 'INDEX_ALREADY_EXISTS', `Index ${indexId} already exists`);
     const index = new SearchIndex(configuration);
     this.#indexes.set(indexId, index);
+    this.#generations.set(indexId, 1);
     return index;
   }
 
   public deleteIndex(indexId: string): boolean {
+    this.#generations.delete(indexId);
     return this.#indexes.delete(indexId);
   }
 
   public addDocument(indexId: string, document: SearchDocument): void {
     this.getIndex(indexId).addDocument(document);
+    this.#incrementGeneration(indexId);
   }
 
   public addDocuments(indexId: string, documents: readonly SearchDocument[]): void {
     this.getIndex(indexId).addDocuments(documents);
+    if (documents.length > 0) this.#incrementGeneration(indexId);
   }
 
   public removeDocument(indexId: string, documentId: string): boolean {
-    return this.getIndex(indexId).removeDocument(documentId);
+    const removed = this.getIndex(indexId).removeDocument(documentId);
+    if (removed) this.#incrementGeneration(indexId);
+    return removed;
   }
 
   public getStatistics(indexId: string): CollectionStatistics {
@@ -70,6 +78,15 @@ export class InMemoryIndexService implements IndexService {
 
   public getDocument(indexId: string, documentId: string): SearchDocument | undefined {
     return this.getIndex(indexId).getDocument(documentId);
+  }
+
+  public getGeneration(indexId: string): number {
+    this.getIndex(indexId);
+    return this.#generations.get(indexId) ?? 1;
+  }
+
+  #incrementGeneration(indexId: string): void {
+    this.#generations.set(indexId, (this.#generations.get(indexId) ?? 1) + 1);
   }
 
   public getIndex(indexId: string): SearchIndex {

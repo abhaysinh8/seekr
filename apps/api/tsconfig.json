@@ -10,6 +10,7 @@
     { "path": "../../packages/config" },
     { "path": "../../packages/search-core" },
     { "path": "../../packages/shared" },
-    { "path": "../../packages/tokenizer" }
+    { "path": "../../packages/tokenizer" },
+    { "path": "../../packages/recommendation-core" }
   ]
 }

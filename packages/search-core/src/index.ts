@@ -1,4 +1,18 @@
 export { escapeHtml, highlightField } from './highlight.js';
+export {
+  dcgAtK,
+  evaluateConfigurations,
+  formatEvaluationTable,
+  ndcgAtK,
+  precisionAtK,
+  recallAtK,
+  reciprocalRank,
+  type EvaluationConfiguration,
+  type EvaluationDataset,
+  type EvaluationResult,
+  type QueryEvaluation,
+  type RelevanceQuery,
+} from './evaluation.js';
 export { MinHeap, selectTopK, type Comparator } from './heap.js';
 export { InMemoryInvertedIndex } from './inverted-index.js';
 export { defaultMaximumEditDistance, levenshteinDistance } from './levenshtein.js';

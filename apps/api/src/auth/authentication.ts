@@ -40,6 +40,8 @@ function requiredScope(method: string, route: string): ApiKeyScope | undefined {
   if (route.includes('/analytics')) return 'analytics:read';
   if (route.endsWith('/search') || route.endsWith('/autocomplete')) return 'search';
   if (route === '/v1/events/click') return 'search';
+  if (route.startsWith('/v1/recommend')) return 'search';
+  if (route === '/v1/interactions') return 'documents:write';
   if (route.includes('/documents')) return method === 'GET' ? 'documents:read' : 'documents:write';
   if (route.startsWith('/v1/indexes')) return method === 'GET' ? 'indexes:read' : 'indexes:write';
   if (route.startsWith('/v1/api-keys')) return method === 'GET' ? 'indexes:read' : 'indexes:write';

@@ -104,6 +104,9 @@ importers:
       '@seekr/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@seekr/recommendation-core':
+        specifier: workspace:*
+        version: link:../../packages/recommendation-core
       '@seekr/search-core':
         specifier: workspace:*
         version: link:../../packages/search-core
@@ -218,10 +221,17 @@ importers:
         version: 5.9.3
 
   packages/recommendation-core:
+    dependencies:
+      '@seekr/tokenizer':
+        specifier: workspace:*
+        version: link:../tokenizer
     devDependencies:
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
+      vitest:
+        specifier: ^4.1.11
+        version: 4.1.11(@types/node@26.2.0)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12))
 
   packages/search-core:
     dependencies:

@@ -17,11 +17,13 @@ import {
 
 import type { IndexSearchService } from '../services/index-service.js';
 import type { AnalyticsService } from '../services/analytics-service.js';
+import type { SearchResponseCache } from '../cache/search-cache.js';
 import { parseRequest } from './validation.js';
 
 interface SearchRouteOptions {
   readonly indexes: IndexSearchService;
   readonly analytics: AnalyticsService;
+  readonly cache: SearchResponseCache;
 }
 
 const cleanFilters = (
@@ -89,7 +91,13 @@ export const searchRoutes: FastifyPluginCallback<SearchRouteOptions> = (app, opt
       ...(body.k1 === undefined ? {} : { k1: body.k1 }),
       ...(body.b === undefined ? {} : { b: body.b }),
     };
-    const result = options.indexes.search(indexId, body.query, searchOptions);
+    const result = await options.cache.getOrCompute(
+      indexId,
+      options.indexes.getGeneration(indexId),
+      body.query,
+      searchOptions,
+      () => options.indexes.search(indexId, body.query, searchOptions),
+    );
     const processingTimeMs = performance.now() - startedAt;
     const searchId = await options.analytics.recordSearch({
       indexId,
@@ -120,11 +128,18 @@ export const searchRoutes: FastifyPluginCallback<SearchRouteOptions> = (app, opt
     };
   });
 
-  app.post('/v1/indexes/:indexId/autocomplete', (request) => {
+  app.post('/v1/indexes/:indexId/autocomplete', async (request) => {
     const { indexId } = parseRequest(indexIdParametersSchema, request.params, 'path parameters');
     const body = parseRequest(autocompleteRequestSchema, request.body, 'autocomplete request');
     const startedAt = performance.now();
-    const suggestions = options.indexes.autocomplete(indexId, body.prefix, { limit: body.limit });
+    const autocompleteOptions = { limit: body.limit };
+    const suggestions = await options.cache.getAutocompleteOrCompute(
+      indexId,
+      options.indexes.getGeneration(indexId),
+      body.prefix,
+      autocompleteOptions,
+      () => options.indexes.autocomplete(indexId, body.prefix, autocompleteOptions),
+    );
 
     return {
       prefix: body.prefix,

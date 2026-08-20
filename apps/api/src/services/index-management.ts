@@ -8,11 +8,13 @@ import type {
 import { HttpError } from '../errors/http-error.js';
 import type { CatalogStore, ManagedIndexRecord } from './catalog-store.js';
 import type { IndexService } from './index-service.js';
+import type { RecommendationDocumentSink } from './recommendation-service.js';
 
 export class IndexManagementService {
   constructor(
     private readonly store: CatalogStore,
     private readonly engine: IndexService,
+    private readonly recommendations?: RecommendationDocumentSink,
   ) {}
 
   async initialize(): Promise<void> {
@@ -20,6 +22,7 @@ export class IndexManagementService {
       this.engine.createIndex(index.id, toEngineConfiguration(index.schema));
       const documents = await this.store.listDocuments(index.id);
       this.engine.addDocuments(index.id, documents.map(toSearchDocument));
+      this.recommendations?.setDocuments(index.id, documents, index.schema);
     }
   }
 
@@ -31,6 +34,7 @@ export class IndexManagementService {
     const index = await this.store.createIndex(input);
     try {
       this.engine.createIndex(index.id, toEngineConfiguration(index.schema));
+      this.recommendations?.setDocuments(index.id, [], index.schema);
       return this.summarize(index);
     } catch (error) {
       await this.store.deleteIndex(index.id);
@@ -50,6 +54,7 @@ export class IndexManagementService {
   async deleteIndex(indexId: string): Promise<void> {
     if (!(await this.store.deleteIndex(indexId))) throw notFound('Index', indexId);
     this.engine.deleteIndex(indexId);
+    this.recommendations?.deleteIndex(indexId);
   }
 
   async updateSchema(indexId: string, schema: IndexSchemaConfigurationApi) {
@@ -61,6 +66,7 @@ export class IndexManagementService {
     this.engine.deleteIndex(indexId);
     this.engine.createIndex(indexId, toEngineConfiguration(schema));
     this.engine.addDocuments(indexId, documents.map(toSearchDocument));
+    this.recommendations?.setDocuments(indexId, documents, schema);
     return {
       index: this.summarize(updated),
       reindexRequired: documents.length > 0,
@@ -74,6 +80,7 @@ export class IndexManagementService {
     this.engine.deleteIndex(indexId);
     this.engine.createIndex(indexId, toEngineConfiguration(index.schema));
     this.engine.addDocuments(indexId, documents.map(toSearchDocument));
+    this.recommendations?.setDocuments(indexId, documents, index.schema);
     return { reindexedDocuments: documents.length };
   }
 
@@ -91,6 +98,7 @@ export class IndexManagementService {
     for (const document of documents) validateDocument(index.schema, document);
     await this.store.upsertDocuments(indexId, documents);
     this.engine.addDocuments(indexId, documents.map(toSearchDocument));
+    this.recommendations?.upsertDocuments(indexId, documents, index.schema);
     return { indexed: documents.length };
   }
 
@@ -99,6 +107,7 @@ export class IndexManagementService {
     if (!(await this.store.deleteDocument(indexId, documentId)))
       throw notFound('Document', documentId);
     this.engine.removeDocument(indexId, documentId);
+    this.recommendations?.removeDocument(indexId, documentId);
   }
 
   private summarize(index: ManagedIndexRecord) {

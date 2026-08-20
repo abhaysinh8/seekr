@@ -17,9 +17,14 @@
   "scripts": {
     "build": "tsc -b",
     "clean": "rimraf dist tsconfig.tsbuildinfo",
+    "test": "vitest run --root ../.. packages/recommendation-core/src",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "@seekr/tokenizer": "workspace:*"
+  },
   "devDependencies": {
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "^4.1.11"
   }
 }

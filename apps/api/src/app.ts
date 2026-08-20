@@ -8,11 +8,14 @@ import type { FastifyError, FastifyServerOptions } from 'fastify';
 import type { ApiEnvironment } from '@seekr/config';
 
 import { createAuthenticationHook } from './auth/authentication.js';
+import { SearchResponseCache } from './cache/search-cache.js';
+import { MemoryCacheStore, ResilientCacheStore } from './cache/store.js';
 import { HttpError } from './errors/http-error.js';
 import { apiKeyRoutes } from './routes/api-keys.js';
 import { analyticsRoutes } from './routes/analytics.js';
 import { crawlRoutes } from './routes/crawl.js';
 import { indexRoutes } from './routes/indexes.js';
+import { recommendationRoutes } from './routes/recommendations.js';
 import { searchRoutes } from './routes/search.js';
 import { InMemoryCatalogStore } from './services/catalog-store.js';
 import { InMemoryAnalyticsRepository } from './services/analytics-repository.js';
@@ -20,8 +23,10 @@ import { AnalyticsService } from './services/analytics-service.js';
 import type { ApiKeyService } from './services/api-key-service.js';
 import { InMemoryCrawlRepository, type CrawlRepository } from './services/crawl-repository.js';
 import { IndexManagementService } from './services/index-management.js';
+import { InMemoryInteractionRepository } from './services/interaction-repository.js';
 import { InMemoryIndexService, type IndexService } from './services/index-service.js';
 import type { HealthDependency } from './services/health-dependency.js';
+import { RecommendationService } from './services/recommendation-service.js';
 import { healthRoutes } from './routes/health.js';
 
 export interface AppDependencies {
@@ -32,6 +37,8 @@ export interface AppDependencies {
   readonly indexManagement?: IndexManagementService;
   readonly apiKeys?: ApiKeyService;
   readonly analytics?: AnalyticsService;
+  readonly recommendations?: RecommendationService;
+  readonly searchCache?: SearchResponseCache;
 }
 
 export interface BuildAppOptions {
@@ -64,11 +71,17 @@ export async function buildApp(options: BuildAppOptions) {
   }
 
   const indexes = options.dependencies.indexes ?? new InMemoryIndexService();
+  const recommendations =
+    options.dependencies.recommendations ??
+    new RecommendationService(new InMemoryInteractionRepository());
   const indexManagement =
     options.dependencies.indexManagement ??
-    new IndexManagementService(new InMemoryCatalogStore(), indexes);
+    new IndexManagementService(new InMemoryCatalogStore(), indexes, recommendations);
   const analytics =
     options.dependencies.analytics ?? new AnalyticsService(new InMemoryAnalyticsRepository());
+  const searchCache =
+    options.dependencies.searchCache ??
+    new SearchResponseCache(new ResilientCacheStore(new MemoryCacheStore()));
 
   app.setErrorHandler(async (error: FastifyError, request, reply) => {
     request.log.error({ err: error }, 'Request failed');
@@ -94,9 +107,11 @@ export async function buildApp(options: BuildAppOptions) {
     crawls: options.dependencies.crawls ?? new InMemoryCrawlRepository(),
   });
   await app.register(indexRoutes, { management: indexManagement });
+  await app.register(recommendationRoutes, { recommendations });
   await app.register(searchRoutes, {
     indexes,
     analytics,
+    cache: searchCache,
   });
 
   app.setNotFoundHandler(async (request, reply) => {
