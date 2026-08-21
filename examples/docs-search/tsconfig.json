@@ -8,5 +8,6 @@
     "src/**/*.ts",
     "src/**/*.tsx",
     ".next/types/**/*.ts"
-  ]
+  ],
+  "references": [{ "path": "../../packages/sdk" }]
 }
