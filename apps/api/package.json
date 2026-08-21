@@ -6,7 +6,7 @@
   "scripts": {
     "build": "tsc -b",
     "clean": "rimraf dist tsconfig.tsbuildinfo",
-    "db:migrate": "tsx --env-file=../../.env src/database/migrate.ts",
+    "db:migrate": "tsx --env-file-if-exists=../../.env src/database/migrate.ts",
     "dev": "tsx watch --env-file=../../.env src/server.ts",
     "loadtest": "tsx src/load-tests/load-test.ts",
     "start": "node dist/server.js",
