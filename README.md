@@ -107,12 +107,55 @@ Benchmarks report real measurements for the current machine and write ignored JS
 ## Project structure
 
 ```text
-apps/             api · crawler · web
-packages/         tokenizer · search-core · recommendation-core · sdk · cli · shared · config
-infrastructure/   Docker image and ordered PostgreSQL migrations
-examples/         public-API integration examples
-docs/             user, algorithm, deployment, backup, and operations guides
+seekr/
+├── .github/                    issue templates, pull-request template, and CI workflows
+├── apps/
+│   ├── api/                    Fastify API, persistence, jobs, caching, and observability
+│   ├── crawler/                respectful web crawler and ingestion worker
+│   └── web/                    Next.js operations dashboard
+├── config/
+│   └── typescript/             shared strict TypeScript configurations
+├── docs/                       API, architecture, search, operations, and deployment guides
+├── examples/
+│   ├── basic/                  minimal public-API usage
+│   └── docs-search/            complete searchable-documentation Next.js example
+├── infrastructure/
+│   ├── docker/                 production container image
+│   └── postgres/migrations/    ordered PostgreSQL schema migrations
+├── packages/
+│   ├── cli/                    Seekr command-line client
+│   ├── config/                 validated service environment configuration
+│   ├── recommendation-core/    framework-neutral recommendation algorithms
+│   ├── sdk/                    official TypeScript API client
+│   ├── search-core/            indexing, retrieval, ranking, and segment algorithms
+│   ├── shared/                 entities and API contracts shared across workspaces
+│   └── tokenizer/              reusable Unicode-aware text-processing pipeline
+├── .dockerignore               Docker build exclusions
+├── .editorconfig               editor defaults
+├── .env.example                documented local environment template
+├── .gitattributes              Git text and line-ending rules
+├── .gitignore                  generated and local file exclusions
+├── .npmrc                      pnpm/npm workspace settings
+├── .prettierignore             formatter exclusions
+├── .prettierrc.json            shared formatting rules
+├── CODE_OF_CONDUCT.md          community standards
+├── CONTRIBUTING.md             contribution workflow
+├── LICENSE                     MIT license
+├── README.md                   project overview and quick start
+├── SECURITY.md                 vulnerability reporting policy
+├── docker-compose.yml          local API, web, crawler, PostgreSQL, and Redis stack
+├── eslint.config.mjs           repository-wide lint configuration
+├── package.json                root scripts and development dependencies
+├── pnpm-lock.yaml              reproducible dependency lockfile
+├── pnpm-workspace.yaml         monorepo workspace and dependency catalog
+├── tsconfig.json               root TypeScript project references
+├── turbo.json                  monorepo task graph and cache configuration
+└── vitest.config.ts            repository-wide test configuration
 ```
+
+This tree documents tracked source and configuration. Generated directories such as
+`node_modules`, `dist`, `.next`, coverage output, local data, and `.env` are intentionally
+excluded. Browse the application and package directories above for their complete source trees.
 
 ## Commands
 
