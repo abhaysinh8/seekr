@@ -18,6 +18,12 @@ export { InMemoryInvertedIndex } from './inverted-index.js';
 export { defaultMaximumEditDistance, levenshteinDistance } from './levenshtein.js';
 export { parseQuery, type ParsedPhrase, type ParsedQuery } from './query-parser.js';
 export {
+  QuerySuggestionIndex,
+  type QuerySuggestion,
+  type QuerySuggestionOptions,
+  type SuggestionResponse,
+} from './query-suggestions.js';
+export {
   BM25RankingStrategy,
   inverseDocumentFrequency,
   smoothedInverseDocumentFrequency,
@@ -28,9 +34,17 @@ export {
   type RankingStrategy,
 } from './ranking.js';
 export { SearchIndex } from './search-engine.js';
+export {
+  correctQuerySpelling,
+  type SpellCorrectionOptions,
+  type SpellCorrectionResult,
+  type VocabularyAccess,
+} from './spell-correction.js';
 export { FileSystemSegmentStore } from './segments/file-system-store.js';
 export { ImmutableSegmentIndex } from './segments/immutable-segment-index.js';
 export { MemorySegmentStore } from './segments/memory-store.js';
+export { SnapshotManager, type SnapshotManifest } from './segments/snapshot-manager.js';
 export type * from './segments/types.js';
 export { Trie } from './trie.js';
+export { SynonymMap, type SynonymRule } from './synonyms.js';
 export type * from './types.js';

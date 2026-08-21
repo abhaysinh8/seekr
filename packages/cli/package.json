@@ -1,0 +1,31 @@
+{
+  "name": "seekr-cli",
+  "version": "0.1.0",
+  "description": "Command-line client for self-hosted Seekr.",
+  "type": "module",
+  "bin": {
+    "seekr": "dist/bin.js"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "rimraf dist tsconfig.tsbuildinfo",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@seekr/sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  },
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
+}

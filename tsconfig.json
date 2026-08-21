@@ -10,6 +10,8 @@
     { "path": "./packages/tokenizer" },
     { "path": "./packages/search-core" },
     { "path": "./packages/recommendation-core" },
+    { "path": "./packages/sdk" },
+    { "path": "./packages/cli" },
     { "path": "./apps/api" },
     { "path": "./apps/crawler" }
   ]

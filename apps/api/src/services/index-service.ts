@@ -6,6 +6,7 @@ import type {
   SearchDocument,
   SearchOptions,
   SearchResponse,
+  SpellCorrectionResult,
 } from '@seekr/search-core';
 
 import { HttpError } from '../errors/http-error.js';
@@ -15,6 +16,7 @@ export interface IndexSearchService {
   autocomplete(indexId: string, prefix: string, options: AutocompleteOptions): readonly string[];
   getDocument(indexId: string, documentId: string): SearchDocument | undefined;
   getGeneration(indexId: string): number;
+  correctQuery(indexId: string, query: string): SpellCorrectionResult;
 }
 
 export interface IndexService extends IndexSearchService {
@@ -83,6 +85,10 @@ export class InMemoryIndexService implements IndexService {
   public getGeneration(indexId: string): number {
     this.getIndex(indexId);
     return this.#generations.get(indexId) ?? 1;
+  }
+
+  public correctQuery(indexId: string, query: string): SpellCorrectionResult {
+    return this.getIndex(indexId).correctQuery(query);
   }
 
   #incrementGeneration(indexId: string): void {

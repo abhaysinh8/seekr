@@ -59,6 +59,7 @@ export const searchRequestSchema = z
     facets: z.array(z.string().trim().min(1).max(128)).max(20).default([]),
     ranking: z.enum(['bm25', 'tfidf']).default('bm25'),
     typoTolerance: z.union([z.boolean(), typoToleranceOptionsSchema]).default(false),
+    spellCorrection: z.boolean().default(false),
     highlight: z.union([z.boolean(), highlightOptionsSchema]).default(false),
     explain: z.boolean().default(false),
     proximityBoost: z.boolean().default(false),

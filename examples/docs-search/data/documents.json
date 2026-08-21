@@ -1,0 +1,98 @@
+[
+  {
+    "id": "bm25-ranking",
+    "fields": {
+      "title": "BM25 ranking",
+      "content": "BM25 ranks documents with term frequency saturation and document length normalization. Configure k1 to control saturation and b to control length normalization."
+    },
+    "metadata": { "section": "Search" }
+  },
+  {
+    "id": "tfidf-ranking",
+    "fields": {
+      "title": "TF-IDF ranking",
+      "content": "TF-IDF combines term frequency with inverse document frequency. Rare terms contribute more than terms found throughout the collection."
+    },
+    "metadata": { "section": "Search" }
+  },
+  {
+    "id": "field-weights",
+    "fields": {
+      "title": "Field weighting",
+      "content": "Give concise title matches more influence than body matches by setting a larger per-field weight in the index schema."
+    },
+    "metadata": { "section": "Schema" }
+  },
+  {
+    "id": "filters-facets",
+    "fields": {
+      "title": "Filters and facets",
+      "content": "Structured filters narrow candidate documents with equals, ranges, membership, and existence operators. Facets count matching values after filtering."
+    },
+    "metadata": { "section": "Search" }
+  },
+  {
+    "id": "autocomplete",
+    "fields": {
+      "title": "Trie autocomplete",
+      "content": "Autocomplete descends a Trie prefix subtree and orders vocabulary terms using document frequency. It does not scan the full term dictionary."
+    },
+    "metadata": { "section": "Search" }
+  },
+  {
+    "id": "typo-tolerance",
+    "fields": {
+      "title": "Typo tolerance and spelling",
+      "content": "Levenshtein edit distance matches conservative fuzzy candidates. Spell correction retries only a zero-result query with a confident vocabulary correction."
+    },
+    "metadata": { "section": "Search" }
+  },
+  {
+    "id": "documents-api",
+    "fields": {
+      "title": "Index documents with the API",
+      "content": "Add one document or send a bounded bulk request. External identifiers make document ingestion idempotent because a repeated identifier updates the stored document."
+    },
+    "metadata": { "section": "API" }
+  },
+  {
+    "id": "typescript-sdk",
+    "fields": {
+      "title": "TypeScript SDK",
+      "content": "The official Seekr client provides typed indexes, documents, search, autocomplete, recommendation, and analytics methods with AbortSignal and structured errors."
+    },
+    "metadata": { "section": "SDK" }
+  },
+  {
+    "id": "api-keys",
+    "fields": {
+      "title": "Scoped API keys",
+      "content": "API keys belong to one project. Grant only the search, document, index, or analytics scopes required by the client and rotate expiring credentials."
+    },
+    "metadata": { "section": "Security" }
+  },
+  {
+    "id": "crawler",
+    "fields": {
+      "title": "Crawl a documentation site",
+      "content": "The crawler respects robots policy, domain boundaries, delays, response limits, redirects, and DNS private-network protection before extracting readable content."
+    },
+    "metadata": { "section": "Crawler" }
+  },
+  {
+    "id": "recommendations",
+    "fields": {
+      "title": "Hybrid recommendations",
+      "content": "Hybrid recommendation combines normalized content similarity, collaborative interaction neighbors, popularity, and recency without calling an embedding service."
+    },
+    "metadata": { "section": "Recommendations" }
+  },
+  {
+    "id": "snapshots",
+    "fields": {
+      "title": "Create and restore snapshots",
+      "content": "A Seekr snapshot stores immutable segments and a checksum for every file. Restore validates into staging before replacing the target index."
+    },
+    "metadata": { "section": "Operations" }
+  }
+]

@@ -49,6 +49,7 @@ export interface CatalogStore {
     limit?: number,
     offset?: number,
   ): Promise<readonly ManagedDocumentRecord[]>;
+  getDocument(indexId: string, documentId: string): Promise<ManagedDocumentRecord | undefined>;
   countDocuments(indexId: string): Promise<number>;
   upsertDocuments(indexId: string, documents: readonly AddDocumentApiRequest[]): Promise<void>;
   deleteDocument(indexId: string, documentId: string): Promise<boolean>;
@@ -154,6 +155,17 @@ export class PostgresCatalogStore implements CatalogStore {
       select count(*)::integer as count from documents where index_id = ${indexId}
     `;
     return rows[0]?.count ?? 0;
+  }
+
+  async getDocument(
+    indexId: string,
+    documentId: string,
+  ): Promise<ManagedDocumentRecord | undefined> {
+    const rows = await this.database.sql<DocumentRow[]>`
+      select external_id as id, index_id, fields, metadata, created_at, updated_at
+      from documents where index_id = ${indexId} and external_id = ${documentId} limit 1
+    `;
+    return rows[0] === undefined ? undefined : mapDocument(rows[0]);
   }
 
   async upsertDocuments(
@@ -266,6 +278,10 @@ export class InMemoryCatalogStore implements CatalogStore {
 
   countDocuments(indexId: string): Promise<number> {
     return Promise.resolve(this.#documents.get(indexId)?.size ?? 0);
+  }
+
+  getDocument(indexId: string, documentId: string): Promise<ManagedDocumentRecord | undefined> {
+    return Promise.resolve(this.#documents.get(indexId)?.get(documentId));
   }
 
   upsertDocuments(indexId: string, documents: readonly AddDocumentApiRequest[]): Promise<void> {

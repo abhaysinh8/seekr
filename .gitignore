@@ -3,6 +3,7 @@ node_modules/
 dist/
 coverage/
 benchmark-results.json
+load-test-results.json
 .turbo/
 *.tsbuildinfo
 .env

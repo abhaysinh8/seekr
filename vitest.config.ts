@@ -10,6 +10,7 @@ export default defineConfig({
     alias: {
       '@seekr/config': path.join(root, 'packages/config/src/index.ts'),
       '@seekr/shared': path.join(root, 'packages/shared/src/index.ts'),
+      '@seekr/sdk': path.join(root, 'packages/sdk/src/index.ts'),
     },
   },
   test: {

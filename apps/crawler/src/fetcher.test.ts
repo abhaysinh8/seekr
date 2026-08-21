@@ -3,6 +3,18 @@ import { describe, expect, it, vi } from 'vitest';
 import { CrawlFetchError, HttpPageFetcher } from './fetcher.js';
 
 describe('HTTP page fetcher', () => {
+  it('blocks DNS rebinding to a private address before fetching', async () => {
+    const implementation = vi.fn<typeof fetch>();
+    const fetcher = new HttpPageFetcher({
+      fetchImplementation: implementation,
+      resolveHostname: () => Promise.resolve(['127.0.0.1']),
+    });
+    await expect(
+      fetcher.fetchPage('https://public.example/', { isUrlAllowed: () => true }),
+    ).rejects.toMatchObject({ code: 'PRIVATE_NETWORK' });
+    expect(implementation).not.toHaveBeenCalled();
+  });
+
   it('follows an allowed redirect and preserves the requested URL', async () => {
     const implementation = vi
       .fn<typeof fetch>()

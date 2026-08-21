@@ -104,8 +104,22 @@ export class RobotsTxtCache {
   }
 }
 
-class DefaultRobotsTextLoader implements RobotsTextLoader {
+export class DefaultRobotsTextLoader implements RobotsTextLoader {
+  constructor(
+    private readonly options: {
+      readonly allowPrivateNetwork?: boolean;
+      readonly resolveHostname?: (hostname: string) => Promise<readonly string[]>;
+    } = {},
+  ) {}
+
   async load(url: string, signal?: AbortSignal): Promise<string> {
+    if (!(this.options.allowPrivateNetwork ?? false)) {
+      const hostname = new URL(url).hostname.replace(/^\[|\]$/gu, '');
+      const resolveHostname = this.options.resolveHostname ?? resolveAll;
+      const addresses = await resolveHostname(hostname);
+      if (addresses.length === 0 || addresses.some(isPrivateNetworkAddress))
+        throw new Error('robots.txt hostname resolves to a private or reserved address');
+    }
     const timeout = AbortSignal.timeout(5_000);
     const combinedSignal = signal === undefined ? timeout : AbortSignal.any([signal, timeout]);
     const response = await fetch(url, {
@@ -119,3 +133,9 @@ class DefaultRobotsTextLoader implements RobotsTextLoader {
     return (await response.text()).slice(0, 64 * 1024);
   }
 }
+
+async function resolveAll(hostname: string): Promise<readonly string[]> {
+  return (await lookup(hostname, { all: true, verbatim: true })).map((entry) => entry.address);
+}
+import { lookup } from 'node:dns/promises';
+import { isPrivateNetworkAddress } from './url.js';

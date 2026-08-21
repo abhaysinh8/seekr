@@ -7,10 +7,12 @@ import {
 } from '@seekr/shared';
 
 import type { AnalyticsService } from '../services/analytics-service.js';
+import type { QuerySuggestionService } from '../services/query-suggestion-service.js';
 import { parseRequest } from './validation.js';
 
 interface AnalyticsRouteOptions {
   readonly analytics: AnalyticsService;
+  readonly suggestions: QuerySuggestionService;
 }
 
 export const analyticsRoutes: FastifyPluginCallback<AnalyticsRouteOptions> = (
@@ -66,6 +68,7 @@ export const analyticsRoutes: FastifyPluginCallback<AnalyticsRouteOptions> = (
   app.post('/v1/events/click', async (request, reply) => {
     const event = parseRequest(clickEventRequestSchema, request.body, 'click event');
     await options.analytics.recordClick(event);
+    options.suggestions.recordClick(event.searchId);
     return reply.status(202).send({ accepted: true, requestId: request.id });
   });
   done();

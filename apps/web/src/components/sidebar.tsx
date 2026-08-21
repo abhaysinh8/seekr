@@ -1,4 +1,7 @@
+'use client';
+
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 
 import { Icon, type IconName } from './icons';
 
@@ -15,6 +18,7 @@ const navigation: ReadonlyArray<{ href: string; icon: IconName; label: string }>
 ];
 
 export function Sidebar() {
+  const pathname = usePathname();
   return (
     <aside className="border-panel hidden w-64 shrink-0 border-r bg-surface lg:flex lg:flex-col">
       <div className="flex h-16 items-center border-b border-panel px-6">
@@ -30,10 +34,12 @@ export function Sidebar() {
       </div>
 
       <nav aria-label="Dashboard" className="flex-1 space-y-1 px-3 py-5">
-        {navigation.map((item, index) => (
+        {navigation.map((item) => (
           <Link
             className={`group flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors hover:bg-elevated hover:text-white ${
-              index === 0 ? 'bg-elevated text-white' : 'text-muted'
+              pathname === item.href || (item.href !== '/' && pathname.startsWith(`${item.href}/`))
+                ? 'bg-elevated text-white'
+                : 'text-muted'
             }`}
             href={item.href}
             key={item.href}
@@ -47,10 +53,10 @@ export function Sidebar() {
       <div className="border-t border-panel p-4">
         <div className="rounded-lg border border-panel bg-canvas p-3">
           <div className="mb-2 flex items-center gap-2 text-xs font-medium text-slate-200">
-            <span className="size-1.5 rounded-full bg-amber-400" /> Bootstrap mode
+            <span className="size-1.5 rounded-full bg-accent" /> Self-hosted runtime
           </div>
           <p className="text-xs leading-5 text-muted">
-            Core algorithms are intentionally not enabled yet.
+            Search and recommendation algorithms run inside Seekr.
           </p>
         </div>
       </div>

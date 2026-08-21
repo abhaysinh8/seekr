@@ -1,4 +1,5 @@
 import type { TokenizeOptions } from '@seekr/tokenizer';
+import type { SynonymRule } from './synonyms.js';
 
 export type ScalarValue = string | number | boolean;
 export type FieldValue = ScalarValue | readonly ScalarValue[] | null;
@@ -20,6 +21,29 @@ export interface FieldConfiguration {
 export interface IndexConfiguration {
   readonly fields?: Readonly<Record<string, FieldConfiguration>>;
   readonly tokenizer?: TokenizeOptions;
+  readonly synonyms?: readonly SynonymRule[];
+  readonly synonymPenalty?: number;
+  readonly rankingRules?: readonly RankingRule[];
+}
+
+export type RankingRule =
+  | {
+      readonly field: string;
+      readonly condition: 'equals' | 'notEquals' | 'exists';
+      readonly value?: ScalarValue;
+      readonly boost: number;
+    }
+  | {
+      readonly field: string;
+      readonly strategy: 'recency';
+      readonly halfLifeDays: number;
+      readonly weight?: number;
+    };
+
+export interface RankingRuleContribution {
+  readonly field: string;
+  readonly rule: 'boost' | 'recency';
+  readonly contribution: number;
 }
 
 export interface TokenOffset {
@@ -113,6 +137,7 @@ export interface TermScoreDebug {
   readonly averageDocumentLength: number;
   readonly fieldWeight: number;
   readonly typoPenalty: number;
+  readonly synonymPenalty?: number;
   readonly proximityBoost: number;
   readonly contribution: number;
   readonly bm25Score?: number;
@@ -130,6 +155,7 @@ export interface ScoreExplanation {
   readonly terms: readonly TermScoreDebug[];
   readonly phrases: readonly PhraseMatchDebug[];
   readonly proximityBoost: number;
+  readonly rankingRules: readonly RankingRuleContribution[];
 }
 
 export interface FieldContribution {

@@ -10,13 +10,16 @@ import {
   listIndexesQuerySchema,
   managedIndexIdParametersSchema,
   updateIndexSchemaRequestSchema,
+  updateSynonymsRequestSchema,
 } from '@seekr/shared';
 
 import type { IndexManagementService } from '../services/index-management.js';
+import type { BackgroundJobService } from '../services/background-jobs.js';
 import { parseRequest } from './validation.js';
 
 interface IndexRouteOptions {
   readonly management: IndexManagementService;
+  readonly jobs?: BackgroundJobService;
 }
 
 export const indexRoutes: FastifyPluginCallback<IndexRouteOptions> = (app, options, done) => {
@@ -34,7 +37,7 @@ export const indexRoutes: FastifyPluginCallback<IndexRouteOptions> = (app, optio
 
   app.get('/v1/indexes', async (request) => {
     const { projectId } = parseRequest(listIndexesQuerySchema, request.query, 'index query');
-    const indexes = await options.management.listIndexes(projectId);
+    const indexes = await options.management.listIndexes(request.auth?.projectId ?? projectId);
     return { indexes, requestId: request.id };
   });
 
@@ -67,12 +70,47 @@ export const indexRoutes: FastifyPluginCallback<IndexRouteOptions> = (app, optio
     return { ...(await options.management.updateSchema(indexId, schema)), requestId: request.id };
   });
 
+  app.get('/v1/indexes/:indexId/synonyms', async (request) => {
+    const { indexId } = parseRequest(
+      managedIndexIdParametersSchema,
+      request.params,
+      'path parameters',
+    );
+    const index = await options.management.getIndex(indexId);
+    return {
+      synonyms: index.schema.synonyms,
+      synonymPenalty: index.schema.synonymPenalty,
+      requestId: request.id,
+    };
+  });
+
+  app.put('/v1/indexes/:indexId/synonyms', async (request) => {
+    const { indexId } = parseRequest(
+      managedIndexIdParametersSchema,
+      request.params,
+      'path parameters',
+    );
+    const input = parseRequest(updateSynonymsRequestSchema, request.body, 'synonym configuration');
+    return {
+      ...(await options.management.updateSynonyms(indexId, input.synonyms, input.synonymPenalty)),
+      requestId: request.id,
+    };
+  });
+
   app.post('/v1/indexes/:indexId/reindex', async (request, reply) => {
     const { indexId } = parseRequest(
       managedIndexIdParametersSchema,
       request.params,
       'path parameters',
     );
+    if (options.jobs !== undefined) {
+      const job = await options.jobs.enqueue(
+        'reindex',
+        { indexId },
+        idempotencyOptions(request.headers['idempotency-key']),
+      );
+      return reply.status(202).send({ job, requestId: request.id });
+    }
     const result = await options.management.reindex(indexId);
     return reply.status(202).send({ ...result, requestId: request.id });
   });
@@ -105,6 +143,18 @@ export const indexRoutes: FastifyPluginCallback<IndexRouteOptions> = (app, optio
     return reply.status(201).send({ ...result, requestId: request.id });
   });
 
+  app.get('/v1/indexes/:indexId/documents/:documentId', async (request) => {
+    const { indexId, documentId } = parseRequest(
+      documentParametersSchema,
+      request.params,
+      'path parameters',
+    );
+    return {
+      document: await options.management.getDocument(indexId, documentId),
+      requestId: request.id,
+    };
+  });
+
   app.post('/v1/indexes/:indexId/documents/bulk', async (request, reply) => {
     const { indexId } = parseRequest(
       managedIndexIdParametersSchema,
@@ -112,6 +162,14 @@ export const indexRoutes: FastifyPluginCallback<IndexRouteOptions> = (app, optio
       'path parameters',
     );
     const { documents } = parseRequest(bulkDocumentsRequestSchema, request.body, 'bulk documents');
+    if (options.jobs !== undefined && documents.length >= 100) {
+      const job = await options.jobs.enqueue(
+        'bulk_ingestion',
+        { indexId, documents },
+        idempotencyOptions(request.headers['idempotency-key']),
+      );
+      return reply.status(202).send({ job, requestId: request.id });
+    }
     const result = await options.management.addDocuments(indexId, documents);
     return reply.status(201).send({ ...result, requestId: request.id });
   });
@@ -128,3 +186,9 @@ export const indexRoutes: FastifyPluginCallback<IndexRouteOptions> = (app, optio
 
   done();
 };
+
+function idempotencyOptions(value: string | string[] | undefined): { idempotencyKey?: string } {
+  return typeof value === 'string' && value.length > 0
+    ? { idempotencyKey: value.slice(0, 200) }
+    : {};
+}

@@ -19,6 +19,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
+    "loadtest": "pnpm --filter @seekr/api loadtest",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "turbo run typecheck",

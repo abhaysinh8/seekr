@@ -1,5 +1,11 @@
 import { highlightField } from './highlight.js';
 import { selectTopK } from './heap.js';
+import {
+  correctQuerySpelling,
+  type SpellCorrectionOptions,
+  type SpellCorrectionResult,
+} from './spell-correction.js';
+import { SynonymMap } from './synonyms.js';
 import { InMemoryInvertedIndex } from './inverted-index.js';
 import { defaultMaximumEditDistance, levenshteinDistance } from './levenshtein.js';
 import { parseQuery, type ParsedPhrase } from './query-parser.js';
@@ -11,6 +17,7 @@ import type {
   HighlightOptions,
   IndexConfiguration,
   PhraseMatchDebug,
+  RankingRuleContribution,
   PostingEntry,
   SearchHit,
   SearchOptions,
@@ -27,6 +34,7 @@ interface ResolvedTerm {
   readonly editDistance: number;
   readonly penalty: number;
   readonly queryFrequency: number;
+  readonly synonym: boolean;
 }
 
 interface PhraseEvaluation {
@@ -43,6 +51,7 @@ interface ScoredCandidate {
   readonly matchedTerms: readonly string[];
   readonly matchedFields: readonly string[];
   readonly fieldContributions: readonly FieldContribution[];
+  readonly rankingRules: readonly RankingRuleContribution[];
 }
 
 const intersect = (left: ReadonlySet<string>, right: ReadonlySet<string>): Set<string> => {
@@ -56,8 +65,10 @@ const compareByScore = (left: ScoredCandidate, right: ScoredCandidate): number =
   right.score - left.score || left.documentId.localeCompare(right.documentId);
 
 export class SearchIndex extends InMemoryInvertedIndex implements SeekrSearchIndex {
+  readonly #synonyms: SynonymMap;
   public constructor(configuration: IndexConfiguration = {}) {
     super(configuration);
+    this.#synonyms = new SynonymMap(configuration.synonyms);
   }
 
   public search(query: string, options: SearchOptions = {}): SearchResponse {
@@ -89,15 +100,17 @@ export class SearchIndex extends InMemoryInvertedIndex implements SeekrSearchInd
     for (const documentId of candidates) {
       const phraseEvaluation = this.evaluatePhrases(documentId, parsed.phrases, allowedFields);
       if (!phraseEvaluation.matches) continue;
-      const candidate = this.scoreDocument(
-        documentId,
-        resolvedTerms,
-        allowedFields,
-        ranking,
-        options,
-        phraseEvaluation.debug,
-        collection,
-        documentFrequencyCache,
+      const candidate = this.applyRankingRules(
+        this.scoreDocument(
+          documentId,
+          resolvedTerms,
+          allowedFields,
+          ranking,
+          options,
+          phraseEvaluation.debug,
+          collection,
+          documentFrequencyCache,
+        ),
       );
       if (hasQuery && candidate.score <= 0) continue;
       scored.push(candidate);
@@ -118,6 +131,10 @@ export class SearchIndex extends InMemoryInvertedIndex implements SeekrSearchInd
     options: AutocompleteOptions = {},
   ): readonly string[] {
     return super.autocomplete(prefix, options);
+  }
+
+  public correctQuery(query: string, options: SpellCorrectionOptions = {}): SpellCorrectionResult {
+    return correctQuerySpelling(query, this, options);
   }
 
   private resolveAllowedFields(
@@ -149,9 +166,21 @@ export class SearchIndex extends InMemoryInvertedIndex implements SeekrSearchInd
           editDistance: 0,
           penalty: 1,
           queryFrequency,
+          synonym: false,
         });
-        continue;
       }
+      for (const expansion of this.#synonyms.expand(queryTerm)) {
+        if (this.getDocumentFrequency(expansion) === 0) continue;
+        resolved.push({
+          queryTerm,
+          matchedTerm: expansion,
+          editDistance: 0,
+          penalty: this.configuration.synonymPenalty ?? 0.7,
+          queryFrequency,
+          synonym: true,
+        });
+      }
+      if (this.getDocumentFrequency(queryTerm) > 0) continue;
       if (typoTolerance !== true && typeof typoTolerance !== 'object') continue;
       const configuration: TypoToleranceOptions =
         typeof typoTolerance === 'object' ? typoTolerance : {};
@@ -173,6 +202,7 @@ export class SearchIndex extends InMemoryInvertedIndex implements SeekrSearchInd
             editDistance: distance,
             penalty: Math.max(0.25, 1 - distance / (maxDistance + 1)),
             queryFrequency,
+            synonym: false,
           });
         }
       }
@@ -254,7 +284,8 @@ export class SearchIndex extends InMemoryInvertedIndex implements SeekrSearchInd
           documentLength,
           averageDocumentLength,
           fieldWeight,
-          typoPenalty: term.penalty,
+          typoPenalty: term.synonym ? 1 : term.penalty,
+          synonymPenalty: term.synonym ? term.penalty : 1,
           proximityBoost: 0,
           contribution,
           ...(ranking instanceof BM25RankingStrategy ? { bm25Score: rankingScore.score } : {}),
@@ -287,6 +318,48 @@ export class SearchIndex extends InMemoryInvertedIndex implements SeekrSearchInd
           matchedTerms: [...value.terms].sort(),
         }))
         .sort((left, right) => left.field.localeCompare(right.field)),
+      rankingRules: [],
+    };
+  }
+
+  private applyRankingRules(candidate: ScoredCandidate): ScoredCandidate {
+    const contributions: RankingRuleContribution[] = [];
+    const document = this.getDocument(candidate.documentId);
+    if (document === undefined) return candidate;
+    for (const rule of this.configuration.rankingRules ?? []) {
+      const value = document.metadata?.[rule.field] ?? document.fields[rule.field];
+      if ('condition' in rule) {
+        const matches =
+          rule.condition === 'exists'
+            ? value !== undefined && value !== null
+            : rule.condition === 'equals'
+              ? value === rule.value
+              : value !== rule.value;
+        if (!matches) continue;
+        contributions.push({
+          field: rule.field,
+          rule: 'boost',
+          contribution: Math.max(candidate.score, 1) * (rule.boost - 1),
+        });
+      } else if (typeof value === 'string') {
+        const timestamp = Date.parse(value);
+        if (!Number.isFinite(timestamp)) continue;
+        const ageDays = Math.max(0, Date.now() - timestamp) / (24 * 60 * 60_000);
+        const decay = 2 ** (-ageDays / rule.halfLifeDays);
+        contributions.push({
+          field: rule.field,
+          rule: 'recency',
+          contribution: Math.max(candidate.score, 1) * decay * (rule.weight ?? 0.2),
+        });
+      }
+    }
+    return {
+      ...candidate,
+      score: Math.max(
+        0,
+        candidate.score + contributions.reduce((sum, item) => sum + item.contribution, 0),
+      ),
+      rankingRules: contributions,
     };
   }
 
@@ -406,6 +479,7 @@ export class SearchIndex extends InMemoryInvertedIndex implements SeekrSearchInd
               terms: candidate.terms,
               phrases: candidate.phrases,
               proximityBoost: candidate.proximityBoost,
+              rankingRules: candidate.rankingRules,
             },
           }
         : {}),

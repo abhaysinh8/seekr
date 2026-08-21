@@ -1,4 +1,9 @@
 export {
+  jobIdParametersSchema,
+  type BackgroundJobStatus,
+  type BackgroundJobType,
+} from './jobs-api.js';
+export {
   recommendationItemParametersSchema,
   recommendationQuerySchema,
   recommendationUserParametersSchema,
@@ -32,7 +37,10 @@ export {
   listDocumentsQuerySchema,
   listIndexesQuerySchema,
   managedIndexIdParametersSchema,
+  rankingRuleSchema,
+  synonymRuleSchema,
   updateIndexSchemaRequestSchema,
+  updateSynonymsRequestSchema,
   type AddDocumentApiRequest,
   type CreateIndexApiRequest,
   type CreateProjectApiRequest,

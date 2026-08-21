@@ -4,6 +4,7 @@ import type {
   CreateProjectApiRequest,
   IndexSchemaConfigurationApi,
 } from '@seekr/shared';
+import type { IndexConfiguration } from '@seekr/search-core';
 
 import { HttpError } from '../errors/http-error.js';
 import type { CatalogStore, ManagedIndexRecord } from './catalog-store.js';
@@ -51,6 +52,10 @@ export class IndexManagementService {
     return this.summarize(index);
   }
 
+  async getProjectId(indexId: string): Promise<string> {
+    return (await this.requiredIndex(indexId)).projectId;
+  }
+
   async deleteIndex(indexId: string): Promise<void> {
     if (!(await this.store.deleteIndex(indexId))) throw notFound('Index', indexId);
     this.engine.deleteIndex(indexId);
@@ -84,6 +89,38 @@ export class IndexManagementService {
     return { reindexedDocuments: documents.length };
   }
 
+  async exportIndex(indexId: string) {
+    const index = await this.requiredIndex(indexId);
+    return { index: this.summarize(index), documents: await this.store.listDocuments(indexId) };
+  }
+
+  async restoreIndex(
+    indexId: string,
+    schema: IndexSchemaConfigurationApi,
+    documents: readonly AddDocumentApiRequest[],
+  ): Promise<void> {
+    await this.requiredIndex(indexId);
+    for (const document of documents) validateDocument(schema, document);
+    const existing = await this.store.listDocuments(indexId);
+    for (const document of existing) await this.store.deleteDocument(indexId, document.id);
+    const updated = await this.store.updateIndexSchema(indexId, schema);
+    if (updated === undefined) throw notFound('Index', indexId);
+    if (documents.length > 0) await this.store.upsertDocuments(indexId, documents);
+    this.engine.deleteIndex(indexId);
+    this.engine.createIndex(indexId, toEngineConfiguration(schema));
+    this.engine.addDocuments(indexId, documents.map(toSearchDocument));
+    this.recommendations?.setDocuments(indexId, documents, schema);
+  }
+
+  async updateSynonyms(
+    indexId: string,
+    synonyms: IndexSchemaConfigurationApi['synonyms'],
+    synonymPenalty: number,
+  ) {
+    const index = await this.requiredIndex(indexId);
+    return this.updateSchema(indexId, { ...index.schema, synonyms, synonymPenalty });
+  }
+
   async listDocuments(indexId: string, limit: number, offset: number) {
     await this.requiredIndex(indexId);
     const [documents, total] = await Promise.all([
@@ -91,6 +128,13 @@ export class IndexManagementService {
       this.store.countDocuments(indexId),
     ]);
     return { documents, total, limit, offset };
+  }
+
+  async getDocument(indexId: string, documentId: string) {
+    await this.requiredIndex(indexId);
+    const document = await this.store.getDocument(indexId, documentId);
+    if (document === undefined) throw notFound('Document', documentId);
+    return document;
   }
 
   async addDocuments(indexId: string, documents: readonly AddDocumentApiRequest[]) {
@@ -127,7 +171,7 @@ export class IndexManagementService {
   }
 }
 
-function toEngineConfiguration(schema: IndexSchemaConfigurationApi) {
+export function toEngineConfiguration(schema: IndexSchemaConfigurationApi): IndexConfiguration {
   return {
     fields: Object.fromEntries(
       Object.entries(schema.fields).map(([name, field]) => [
@@ -140,6 +184,23 @@ function toEngineConfiguration(schema: IndexSchemaConfigurationApi) {
           weight: field.weight,
         },
       ]),
+    ),
+    synonyms: schema.synonyms,
+    synonymPenalty: schema.synonymPenalty,
+    rankingRules: schema.rankingRules.map((rule) =>
+      'condition' in rule
+        ? {
+            field: rule.field,
+            condition: rule.condition,
+            boost: rule.boost,
+            ...(rule.value === undefined ? {} : { value: rule.value }),
+          }
+        : {
+            field: rule.field,
+            strategy: rule.strategy,
+            halfLifeDays: rule.halfLifeDays,
+            weight: rule.weight,
+          },
     ),
   };
 }
@@ -156,21 +217,28 @@ function validateDocument(
     const field = schema.fields[name];
     if (field === undefined)
       throw new HttpError(400, 'UNKNOWN_FIELD', `Field ${name} is not defined in the index schema`);
-    const values = Array.isArray(value) ? value : [value];
-    for (const entry of values) {
-      if (entry === null) continue;
-      const valid =
-        (field.type === 'number' && typeof entry === 'number') ||
-        (field.type === 'boolean' && typeof entry === 'boolean') ||
-        ((field.type === 'text' || field.type === 'string' || field.type === 'date') &&
-          typeof entry === 'string');
-      if (!valid)
-        throw new HttpError(
-          400,
-          'FIELD_TYPE_MISMATCH',
-          `Field ${name} must contain ${field.type} values`,
-        );
-    }
+    validateFieldValue(name, field.type, value);
+  }
+  for (const [name, value] of Object.entries(document.metadata)) {
+    const field = schema.fields[name];
+    if (field !== undefined) validateFieldValue(name, field.type, value);
+  }
+}
+
+function validateFieldValue(
+  name: string,
+  type: IndexSchemaConfigurationApi['fields'][string]['type'],
+  value: AddDocumentApiRequest['fields'][string],
+): void {
+  const values = Array.isArray(value) ? value : [value];
+  for (const entry of values) {
+    if (entry === null) continue;
+    const valid =
+      (type === 'number' && typeof entry === 'number') ||
+      (type === 'boolean' && typeof entry === 'boolean') ||
+      ((type === 'text' || type === 'string' || type === 'date') && typeof entry === 'string');
+    if (!valid)
+      throw new HttpError(400, 'FIELD_TYPE_MISMATCH', `Field ${name} must contain ${type} values`);
   }
 }
 

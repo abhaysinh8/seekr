@@ -4,7 +4,7 @@ import { extractPageContent } from './extraction.js';
 import { HttpPageFetcher } from './fetcher.js';
 import { discoverPageLinks } from './links.js';
 import { OriginRateLimiter } from './rate-limiter.js';
-import { RobotsTxtCache } from './robots.js';
+import { DefaultRobotsTextLoader, RobotsTxtCache } from './robots.js';
 import type {
   CrawlFailure,
   CrawlJobResult,
@@ -35,7 +35,7 @@ export class WebCrawler {
   readonly #fetcher: PageFetcher | undefined;
   readonly #indexSink: PageIndexSink;
   readonly #reporter: CrawlReporter | undefined;
-  readonly #robots: RobotsTxtCache;
+  readonly #robots: RobotsTxtCache | undefined;
   readonly #rateLimiter: OriginRateLimiter;
   readonly #now: () => Date;
 
@@ -43,7 +43,7 @@ export class WebCrawler {
     this.#fetcher = dependencies.fetcher;
     this.#indexSink = dependencies.indexSink;
     this.#reporter = dependencies.reporter;
-    this.#robots = dependencies.robots ?? new RobotsTxtCache();
+    this.#robots = dependencies.robots;
     this.#rateLimiter = dependencies.rateLimiter ?? new OriginRateLimiter();
     this.#now = dependencies.now ?? (() => new Date());
   }
@@ -78,7 +78,13 @@ export class WebCrawler {
         maxRetries: configuration.maxRetries,
         maxResponseBytes: configuration.maxResponseBytes,
         maxRedirects: configuration.maxRedirects,
+        allowPrivateNetwork: configuration.allowPrivateNetwork,
       });
+    const robots =
+      this.#robots ??
+      new RobotsTxtCache(
+        new DefaultRobotsTextLoader({ allowPrivateNetwork: configuration.allowPrivateNetwork }),
+      );
 
     await this.#report('running', counters);
     while (queue.length > 0 && processed < configuration.maxPages) {
@@ -90,7 +96,7 @@ export class WebCrawler {
       await Promise.all(
         batch.map(async (entry) => {
           try {
-            const policy = await this.#robots.getPolicy(entry.url, request.signal);
+            const policy = await robots.getPolicy(entry.url, request.signal);
             if (!policy.isAllowed(entry.url)) {
               counters.skipped += 1;
               return;

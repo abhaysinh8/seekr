@@ -1,0 +1,29 @@
+name: Feature request
+description: Propose a focused, self-hostable capability
+title: '[Feature]: '
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      { label: Problem, description: What developer or retrieval problem should this solve? }
+    validations: { required: true }
+  - type: textarea
+    id: proposal
+    attributes:
+      {
+        label: Proposed approach,
+        description: Include API,
+        algorithm,
+        storage,
+        compatibility,
+        and complexity considerations.,
+      }
+    validations: { required: true }
+  - type: checkboxes
+    id: integrity
+    attributes:
+      label: Search-engine integrity
+      options:
+        - label: This does not replace Seekr core algorithms with a hosted search service.
+          required: true

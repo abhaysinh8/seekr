@@ -25,6 +25,12 @@ export const healthRoutes: FastifyPluginCallback<HealthRouteOptions> = (app, opt
     timestamp: new Date().toISOString(),
     version: '0.1.0',
   }));
+  app.get('/live', (): HealthResponse => ({
+    service: 'seekr-api',
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    version: '0.1.0',
+  }));
 
   app.get('/ready', async (_request, reply): Promise<HealthResponse> => {
     const [postgres, redis] = await Promise.all([

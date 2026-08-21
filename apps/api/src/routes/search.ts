@@ -18,12 +18,14 @@ import {
 import type { IndexSearchService } from '../services/index-service.js';
 import type { AnalyticsService } from '../services/analytics-service.js';
 import type { SearchResponseCache } from '../cache/search-cache.js';
+import type { QuerySuggestionService } from '../services/query-suggestion-service.js';
 import { parseRequest } from './validation.js';
 
 interface SearchRouteOptions {
   readonly indexes: IndexSearchService;
   readonly analytics: AnalyticsService;
   readonly cache: SearchResponseCache;
+  readonly suggestions: QuerySuggestionService;
 }
 
 const cleanFilters = (
@@ -91,13 +93,32 @@ export const searchRoutes: FastifyPluginCallback<SearchRouteOptions> = (app, opt
       ...(body.k1 === undefined ? {} : { k1: body.k1 }),
       ...(body.b === undefined ? {} : { b: body.b }),
     };
-    const result = await options.cache.getOrCompute(
+    let result = await options.cache.getOrCompute(
       indexId,
       options.indexes.getGeneration(indexId),
       body.query,
       searchOptions,
       () => options.indexes.search(indexId, body.query, searchOptions),
     );
+    const correction =
+      body.spellCorrection && result.total === 0
+        ? options.indexes.correctQuery(indexId, body.query)
+        : {
+            originalQuery: body.query,
+            correctedQuery: body.query,
+            correctionApplied: false,
+            correctionConfidence: 0,
+            corrections: [],
+          };
+    if (correction.correctionApplied) {
+      result = await options.cache.getOrCompute(
+        indexId,
+        options.indexes.getGeneration(indexId),
+        correction.correctedQuery,
+        searchOptions,
+        () => options.indexes.search(indexId, correction.correctedQuery, searchOptions),
+      );
+    }
     const processingTimeMs = performance.now() - startedAt;
     const searchId = await options.analytics.recordSearch({
       indexId,
@@ -111,11 +132,19 @@ export const searchRoutes: FastifyPluginCallback<SearchRouteOptions> = (app, opt
       })),
       ...(body.sessionId === undefined ? {} : { sessionId: body.sessionId }),
     });
+    options.suggestions.recordSearch(
+      indexId,
+      searchId,
+      body.query,
+      result.total,
+      result.results.length,
+    );
 
     return {
       query: body.query,
       processingTimeMs,
       searchId,
+      correction,
       total: result.total,
       limit: body.limit,
       offset: body.offset,
@@ -140,10 +169,13 @@ export const searchRoutes: FastifyPluginCallback<SearchRouteOptions> = (app, opt
       autocompleteOptions,
       () => options.indexes.autocomplete(indexId, body.prefix, autocompleteOptions),
     );
+    const combined = options.suggestions.suggest(indexId, body.prefix, body.limit, suggestions);
 
     return {
       prefix: body.prefix,
       suggestions,
+      termSuggestions: combined.termSuggestions,
+      querySuggestions: combined.querySuggestions,
       processingTimeMs: performance.now() - startedAt,
       requestId: request.id,
     };

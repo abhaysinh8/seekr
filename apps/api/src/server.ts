@@ -15,6 +15,11 @@ import { PostgresCrawlRepository } from './services/crawl-repository.js';
 import { IndexManagementService } from './services/index-management.js';
 import { PostgresInteractionRepository } from './services/interaction-repository.js';
 import { RecommendationService } from './services/recommendation-service.js';
+import { BackgroundJobService } from './services/background-jobs.js';
+import { PostgresJobRepository } from './services/job-repository.js';
+import { bulkDocumentsRequestSchema } from '@seekr/shared';
+import { QuerySuggestionService } from './services/query-suggestion-service.js';
+import { IndexSnapshotService } from './services/snapshot-service.js';
 
 const environment = loadApiEnvironment();
 const database = createDatabase(environment.DATABASE_URL);
@@ -30,6 +35,25 @@ const analytics = new AnalyticsService(new PostgresAnalyticsRepository(database)
 const searchCache = new SearchResponseCache(
   new ResilientCacheStore(new RedisCacheStore(cache.client)),
 );
+const querySuggestions = new QuerySuggestionService();
+const backgroundJobs = new BackgroundJobService(new PostgresJobRepository(database));
+const snapshots = new IndexSnapshotService(
+  indexManagement,
+  environment.SEEKR_INDEX_PATH,
+  environment.SEEKR_SNAPSHOT_PATH,
+);
+backgroundJobs.register('reindex', async (payload, context) => {
+  if (typeof payload.indexId !== 'string') throw new Error('Invalid reindex job payload');
+  await context.reportProgress(10);
+  await indexManagement.reindex(payload.indexId);
+});
+backgroundJobs.register('bulk_ingestion', async (payload, context) => {
+  if (typeof payload.indexId !== 'string') throw new Error('Invalid bulk ingestion job payload');
+  const { documents } = bulkDocumentsRequestSchema.parse({ documents: payload.documents });
+  await context.reportProgress(10);
+  await indexManagement.addDocuments(payload.indexId, documents);
+});
+const jobTimer = setInterval(() => void backgroundJobs.runOnce(), 250);
 await indexManagement.initialize();
 for (const index of await catalogStore.listIndexes())
   await recommendations.loadInteractions(index.id);
@@ -38,13 +62,16 @@ const app = await buildApp({
   dependencies: {
     analytics,
     apiKeys,
+    backgroundJobs,
     cache,
     crawls,
     database,
     indexManagement,
     indexes,
     recommendations,
+    querySuggestions,
     searchCache,
+    snapshots,
   },
   environment,
   logger: {
@@ -61,6 +88,7 @@ const app = await buildApp({
 });
 
 app.addHook('onClose', async () => {
+  clearInterval(jobTimer);
   await Promise.allSettled([database.close(), cache.close()]);
 });
 

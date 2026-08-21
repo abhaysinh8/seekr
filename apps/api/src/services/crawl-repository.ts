@@ -37,6 +37,7 @@ export interface CrawlRepository {
   deleteSource(id: string): Promise<boolean>;
   createJob(sourceId: string): Promise<CrawlJobRecord>;
   getJob(id: string): Promise<CrawlJobRecord | undefined>;
+  listJobs(projectId?: string, limit?: number): Promise<readonly CrawlJobRecord[]>;
 }
 
 interface CrawlSourceRow extends Omit<CrawlSourceRecord, 'createdAt' | 'updatedAt'> {
@@ -118,6 +119,23 @@ export class PostgresCrawlRepository implements CrawlRepository {
     `;
     return rows[0] === undefined ? undefined : mapJob(rows[0]);
   }
+
+  async listJobs(projectId?: string, limit = 20): Promise<readonly CrawlJobRecord[]> {
+    const rows =
+      projectId === undefined
+        ? await this.database.sql<CrawlJobRow[]>`
+            select job.id, job.source_id, job.status, job.discovered, job.fetched, job.indexed,
+              job.skipped, job.failed, job.error_message, job.started_at, job.completed_at,
+              job.created_at from crawl_jobs job order by job.created_at desc limit ${limit}
+          `
+        : await this.database.sql<CrawlJobRow[]>`
+            select job.id, job.source_id, job.status, job.discovered, job.fetched, job.indexed,
+              job.skipped, job.failed, job.error_message, job.started_at, job.completed_at,
+              job.created_at from crawl_jobs job join crawl_sources source on source.id = job.source_id
+            where source.project_id = ${projectId} order by job.created_at desc limit ${limit}
+          `;
+    return rows.map(mapJob);
+  }
 }
 
 export class InMemoryCrawlRepository implements CrawlRepository {
@@ -182,6 +200,18 @@ export class InMemoryCrawlRepository implements CrawlRepository {
 
   getJob(id: string): Promise<CrawlJobRecord | undefined> {
     return Promise.resolve(this.#jobs.get(id));
+  }
+
+  listJobs(projectId?: string, limit = 20): Promise<readonly CrawlJobRecord[]> {
+    return Promise.resolve(
+      [...this.#jobs.values()]
+        .filter((job) => {
+          const source = this.#sources.get(job.sourceId);
+          return projectId === undefined || source?.projectId === projectId;
+        })
+        .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+        .slice(0, limit),
+    );
   }
 }
 

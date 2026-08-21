@@ -1,59 +1,48 @@
 # Seekr
 
-Seekr is an open-source, self-hosted search and recommendation engine built from first principles. It is designed for developers who want to run search infrastructure locally or deploy it without handing indexing, ranking, or recommendation logic to a hosted search provider.
+**A self-hosted search and recommendation engine implemented from first principles in TypeScript.**
 
-> **Project status:** lexical search-core and shared tokenizer milestones complete. Recommendation algorithms and public indexing/search APIs are not implemented yet.
+Seekr exists for developers who want to understand, run, and control their retrieval stack. It is not a wrapper around Elasticsearch, OpenSearch, Algolia, Meilisearch, Typesense, Solr, Pinecone, Weaviate, an embedding API, or any hosted search service. Its tokenizer, inverted index, posting lists, TF-IDF, BM25, top-K heap, Trie, edit distance, phrases, segments, and recommendation algorithms live in this repository.
 
-## What exists today
+> Seekr is pre-1.0 and designed for a single active search/index writer. Read the [scaling boundaries](docs/deployment.md#honest-scaling-boundaries) before production use.
 
-- pnpm and Turborepo TypeScript monorepo
-- Next.js dashboard shell with all planned product sections
-- Fastify API with structured errors, request logging, CORS, liveness, and dependency readiness
-- PostgreSQL schema for users, projects, indexes, documents, crawling, analytics, interactions, and API keys
-- Redis connection and readiness adapter
-- independently deployable crawler process boundary
-- strict environment parsing with Zod
-- Docker Compose for the complete local stack
-- ESLint, Prettier, strict TypeScript, Vitest, and build orchestration
-- isolated package boundaries for tokenization, search, and recommendation algorithms
-- dependency-free, Unicode-aware tokenizer with source offsets, stop words, stemming hooks, and n-grams
-- from-scratch inverted index with BM25/TF-IDF ranking, field weights, filters/facets, autocomplete, fuzzy and phrase search, highlighting, explanations, and immutable segments
+## Key features
 
-No Elasticsearch, OpenSearch, Algolia, Meilisearch, Typesense, Solr, hosted search API, vector database, or external embedding service is used.
+- Unicode-aware shared tokenizer with offsets, stop words, stemming hooks, and n-grams
+- arbitrary searchable fields, per-field postings and lengths, BM25/TF-IDF, field weights, custom ranking rules, and explain mode
+- filters, facets, sortable metadata, quoted phrases, proximity boost, safe highlighting, typo tolerance, spell correction, and synonyms
+- Trie autocomplete plus history-aware query suggestions
+- immutable segments, tombstones, compaction, checksummed snapshots, Redis response caching, jobs, and PostgreSQL source documents
+- content-based, item-item, user-user, popularity, recency, and normalized hybrid recommendations
+- respectful crawler with robots policy, allowlists, rate limits, retries, size/type limits, DNS/private-network SSRF controls, extraction, and deduplication
+- Fastify REST API, scoped API keys, analytics, Prometheus metrics, Next.js dashboard, TypeScript SDK, CLI, and Docker Compose
 
-## Repository layout
+## Architecture
 
-```text
-seekr/
-├── apps/
-│   ├── api/                  # Fastify HTTP API
-│   ├── crawler/              # crawl worker process boundary
-│   └── web/                  # Next.js dashboard
-├── config/
-│   └── typescript/           # shared compiler profiles
-├── docs/                     # architecture and contributor guides
-├── examples/                 # client examples as APIs become available
-├── infrastructure/
-│   ├── docker/               # application container build
-│   └── postgres/migrations/  # ordered PostgreSQL schema migrations
-├── packages/
-│   ├── config/               # validated runtime configuration
-│   ├── recommendation-core/  # recommendation algorithm boundary
-│   ├── search-core/          # lexical indexing and ranking engine
-│   ├── shared/               # shared schemas and transport types
-│   └── tokenizer/            # shared indexing/query text pipeline
-├── docker-compose.yml
-├── pnpm-workspace.yaml
-└── turbo.json
+```mermaid
+flowchart LR
+  Sources[Documents / crawler / interactions] --> API[Fastify API]
+  API --> PG[(PostgreSQL)]
+  API --> Cache[(Redis)]
+  API --> Search[search-core]
+  Search --> Tok[tokenizer]
+  Search --> Seg[immutable segments]
+  API --> Recs[recommendation-core]
+  Web[Next.js dashboard] --> API
+  SDK[SDK / CLI] --> API
 ```
 
-## Requirements
+```mermaid
+flowchart LR
+  Client --> Parser[Query parser] --> Tokenizer --> Candidates[Posting-list candidates]
+  Candidates --> BM25 --> Rules[Field + ranking rules] --> Heap[Top-K heap] --> Response
+```
 
-- Node.js 24+
-- pnpm 11+
-- Docker and Docker Compose
+The framework-neutral packages remain inspectable: [algorithm architecture](docs/architecture.md) explains the data structures, equations, examples, and complexity.
 
-## Run locally
+## Quick start
+
+Requirements: Node.js 24+, pnpm 11+, and Docker Compose.
 
 ```bash
 cp .env.example .env
@@ -63,70 +52,88 @@ pnpm db:migrate
 pnpm dev
 ```
 
-Open the dashboard at `http://localhost:3000`. Check the API at `http://localhost:4000/health` and full dependency readiness at `http://localhost:4000/ready`.
-
-On PowerShell, copy the environment file with `Copy-Item .env.example .env`.
-
-## Run everything with Docker
+PowerShell: `Copy-Item .env.example .env`. The dashboard is at `http://localhost:3000`; the API is at `http://localhost:4000`. Or start the whole stack:
 
 ```bash
 docker compose up --build
 ```
 
-PostgreSQL and Redis data are stored in named volumes. The initial schema is applied automatically when the PostgreSQL volume is first created.
+For a new project, call `POST /v1/projects`, create an index schema, then create the first project API key. The raw key is returned once. Store it securely.
 
-## Environment variables
+## REST API example
 
-| Variable              | Required     | Default                 | Purpose                                                       |
-| --------------------- | ------------ | ----------------------- | ------------------------------------------------------------- |
-| `DATABASE_URL`        | API/crawler  | none                    | PostgreSQL connection URL                                     |
-| `REDIS_URL`           | API/crawler  | none                    | Redis connection URL using `redis://` or `rediss://`          |
-| `NODE_ENV`            | no           | `development`           | runtime mode                                                  |
-| `LOG_LEVEL`           | no           | `info`                  | Pino log level                                                |
-| `API_HOST`            | no           | `0.0.0.0`               | API bind address                                              |
-| `API_PORT`            | no           | `4000`                  | API port                                                      |
-| `CORS_ORIGIN`         | no           | `http://localhost:3000` | allowed dashboard origin                                      |
-| `NEXT_PUBLIC_API_URL` | no           | `http://localhost:4000` | browser-visible API base URL                                  |
-| `POSTGRES_DB`         | Compose only | `seekr`                 | container database name                                       |
-| `POSTGRES_USER`       | Compose only | `seekr`                 | container database user                                       |
-| `POSTGRES_PASSWORD`   | Compose only | local value             | container database password; change outside local development |
+```bash
+curl -X POST http://localhost:4000/v1/indexes/$INDEX_ID/search \
+  -H "Authorization: Bearer $SEEKR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"query":"\"machine learning\" systems","limit":10,"typoTolerance":true,"highlight":true}'
+```
 
-Startup fails with a concise validation error when a required service variable is missing or malformed.
+## SDK example
+
+```ts
+import { SeekrClient } from '@seekr/sdk';
+
+const seekr = new SeekrClient({
+  baseUrl: 'http://localhost:4000',
+  apiKey: process.env.SEEKR_API_KEY,
+});
+
+const result = await seekr.indexes.search(indexId, {
+  query: 'machine learning',
+  filters: [{ field: 'category', operator: 'equals', value: 'education' }],
+  facets: ['category'],
+  highlight: true,
+});
+```
+
+See the polished [documentation-search example](examples/docs-search) and [SDK/CLI guide](docs/sdk-cli.md).
+
+## Search and recommendation capabilities
+
+Search candidates come from posting-list unions/intersections, never a scan of unrelated documents. BM25 is the default, TF-IDF remains selectable, and a bounded heap selects `offset + limit` results. Exact terms outrank fuzzy/synonym expansions. Phrase matching uses stored same-field positions. Facets count the filtered candidate set.
+
+Recommendations derive sparse TF-IDF content vectors and weighted interaction vectors, compare them with cosine similarity, normalize component scores, and combine content, collaborative, popularity, and recency signals. Cold users fall back to meaningful available signals rather than fabricated results.
+
+## Benchmarking and relevance
+
+```bash
+pnpm benchmark
+pnpm loadtest
+```
+
+Benchmarks report real measurements for the current machine and write ignored JSON artifacts; this README intentionally contains no fabricated numbers. Relevance helpers compute Precision@K, Recall@K, MRR, DCG, and NDCG. See [performance and evaluation](docs/performance.md).
+
+## Project structure
+
+```text
+apps/             api · crawler · web
+packages/         tokenizer · search-core · recommendation-core · sdk · cli · shared · config
+infrastructure/   Docker image and ordered PostgreSQL migrations
+examples/         public-API integration examples
+docs/             user, algorithm, deployment, backup, and operations guides
+```
 
 ## Commands
 
-| Command             | Description                               |
-| ------------------- | ----------------------------------------- |
-| `pnpm dev`          | run web, API, and crawler in watch mode   |
-| `pnpm dev:services` | start only PostgreSQL and Redis           |
-| `pnpm db:migrate`   | apply pending PostgreSQL migrations       |
-| `pnpm build`        | build every workspace in dependency order |
-| `pnpm typecheck`    | run strict TypeScript checks              |
-| `pnpm lint`         | lint the repository                       |
-| `pnpm test`         | run Vitest once                           |
-| `pnpm format:check` | verify formatting                         |
+| Command             | Purpose                          |
+| ------------------- | -------------------------------- |
+| `pnpm dev`          | run applications in watch mode   |
+| `pnpm build`        | production-build every workspace |
+| `pnpm test`         | deterministic Vitest suite       |
+| `pnpm typecheck`    | strict TypeScript checks         |
+| `pnpm lint`         | ESLint checks                    |
+| `pnpm format:check` | Prettier verification            |
+| `pnpm benchmark`    | search-core performance suite    |
+| `pnpm loadtest`     | live API workload generator      |
 
-## Architecture rules
+## Documentation and community
 
-- Search algorithms live only in `packages/search-core`.
-- Recommendation algorithms live only in `packages/recommendation-core`.
-- Tokenization lives only in `packages/tokenizer`.
-- Applications own framework and transport integration; packages remain framework-neutral.
-- PostgreSQL holds durable product state. Redis is an optimization and coordination layer.
-- API liveness is independent from dependency readiness.
+Start at the [documentation index](docs/README.md). Contributions are welcome; read [CONTRIBUTING.md](CONTRIBUTING.md), the [Code of Conduct](CODE_OF_CONDUCT.md), and [security policy](SECURITY.md).
 
-See [Architecture](docs/architecture.md) and [Development guide](docs/development.md) for more detail.
+## Roadmap
 
-## Next milestone
-
-Connect the completed lexical core to durable application workflows:
-
-1. project/index/document API services and validation
-2. PostgreSQL document catalog and segment lifecycle integration
-3. background reindex and compaction jobs
-4. Search Playground integration using highlights and explanations
-
-Persistence and public document/search APIs should follow once the core contracts and correctness suite are stable.
+Next priorities are connecting immutable segments/snapshots to the complete API lifecycle, a dedicated background worker process, crash-safe online migration orchestration, richer language analysis, and—only after correctness and operational work—multi-node sharding and replication.
 
 ## License
 

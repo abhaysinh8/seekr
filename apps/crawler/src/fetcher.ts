@@ -1,5 +1,7 @@
+import { lookup } from 'node:dns/promises';
+
 import type { FetchedPage, PageFetcher } from './types.js';
-import { normalizeUrl } from './url.js';
+import { isPrivateNetworkAddress, normalizeUrl } from './url.js';
 
 const HTML_CONTENT_TYPES = new Set(['text/html', 'application/xhtml+xml']);
 const RETRYABLE_STATUS_CODES = new Set([408, 425, 429, 500, 502, 503, 504]);
@@ -13,6 +15,8 @@ export interface HttpPageFetcherOptions {
   readonly userAgent?: string;
   readonly fetchImplementation?: typeof fetch;
   readonly wait?: (milliseconds: number) => Promise<void>;
+  readonly resolveHostname?: (hostname: string) => Promise<readonly string[]>;
+  readonly allowPrivateNetwork?: boolean;
 }
 
 export class CrawlFetchError extends Error {
@@ -35,6 +39,8 @@ export class HttpPageFetcher implements PageFetcher {
   readonly #userAgent: string;
   readonly #fetch: typeof fetch;
   readonly #wait: (milliseconds: number) => Promise<void>;
+  readonly #resolveHostname: ((hostname: string) => Promise<readonly string[]>) | undefined;
+  readonly #allowPrivateNetwork: boolean;
 
   constructor(options: HttpPageFetcherOptions = {}) {
     this.#requestTimeoutMs = options.requestTimeoutMs ?? 10_000;
@@ -44,6 +50,10 @@ export class HttpPageFetcher implements PageFetcher {
     this.#retryBaseDelayMs = options.retryBaseDelayMs ?? 250;
     this.#userAgent = options.userAgent ?? 'SeekrBot/0.1 (+https://github.com/seekr)';
     this.#fetch = options.fetchImplementation ?? fetch;
+    this.#resolveHostname =
+      options.resolveHostname ??
+      (options.fetchImplementation === undefined ? resolveAll : undefined);
+    this.#allowPrivateNetwork = options.allowPrivateNetwork ?? false;
     this.#wait =
       options.wait ??
       ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
@@ -80,6 +90,7 @@ export class HttpPageFetcher implements PageFetcher {
           `URL is outside the crawl policy: ${currentUrl}`,
         );
       }
+      await this.#assertPublicResolution(currentUrl);
       const timeout = AbortSignal.timeout(this.#requestTimeoutMs);
       const signal =
         options.signal === undefined ? timeout : AbortSignal.any([options.signal, timeout]);
@@ -139,6 +150,21 @@ export class HttpPageFetcher implements PageFetcher {
     }
     throw new CrawlFetchError('TOO_MANY_REDIRECTS', 'Maximum redirects exceeded');
   }
+
+  async #assertPublicResolution(url: string): Promise<void> {
+    if (this.#resolveHostname === undefined || this.#allowPrivateNetwork) return;
+    const hostname = new URL(url).hostname.replace(/^\[|\]$/gu, '');
+    const addresses = await this.#resolveHostname(hostname);
+    if (addresses.length === 0 || addresses.some(isPrivateNetworkAddress))
+      throw new CrawlFetchError(
+        'PRIVATE_NETWORK',
+        `Hostname resolves to a blocked network address: ${hostname}`,
+      );
+  }
+}
+
+async function resolveAll(hostname: string): Promise<readonly string[]> {
+  return (await lookup(hostname, { all: true, verbatim: true })).map((entry) => entry.address);
 }
 
 async function readLimitedBody(response: Response, maximumBytes: number): Promise<string> {

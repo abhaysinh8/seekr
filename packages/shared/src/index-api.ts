@@ -33,12 +33,35 @@ export const indexFieldSchema = z
     }
   });
 
+export const synonymRuleSchema = z.object({
+  source: z.string().trim().min(1).max(200),
+  targets: z.array(z.string().trim().min(1).max(200)).min(1).max(20),
+  bidirectional: z.boolean().default(false),
+});
+export const rankingRuleSchema = z.union([
+  z.object({
+    field: fieldNameSchema,
+    condition: z.enum(['equals', 'notEquals', 'exists']),
+    value: scalarSchema.optional(),
+    boost: z.number().min(0).max(10),
+  }),
+  z.object({
+    field: fieldNameSchema,
+    strategy: z.literal('recency'),
+    halfLifeDays: z.number().positive().max(3650),
+    weight: z.number().min(0).max(10).default(0.2),
+  }),
+]);
+
 export const indexSchemaConfigurationSchema = z.object({
   fields: z
     .record(fieldNameSchema, indexFieldSchema)
     .refine((fields) => Object.keys(fields).length <= 128, {
       message: 'An index may define at most 128 fields',
     }),
+  synonyms: z.array(synonymRuleSchema).max(500).default([]),
+  synonymPenalty: z.number().positive().max(1).default(0.7),
+  rankingRules: z.array(rankingRuleSchema).max(20).default([]),
 });
 
 export const createProjectRequestSchema = z.object({
@@ -59,6 +82,10 @@ export const createIndexRequestSchema = z.object({
 });
 
 export const updateIndexSchemaRequestSchema = z.object({ schema: indexSchemaConfigurationSchema });
+export const updateSynonymsRequestSchema = z.object({
+  synonyms: z.array(synonymRuleSchema).max(500),
+  synonymPenalty: z.number().positive().max(1).default(0.7),
+});
 export const managedIndexIdParametersSchema = z.object({ indexId: entityIdSchema });
 export const documentParametersSchema = z.object({
   indexId: entityIdSchema,

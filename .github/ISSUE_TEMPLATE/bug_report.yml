@@ -1,0 +1,32 @@
+name: Bug report
+description: Report a reproducible Seekr defect
+title: '[Bug]: '
+labels: [bug]
+body:
+  - type: textarea
+    id: summary
+    attributes: { label: Summary, description: What happened and what did you expect? }
+    validations: { required: true }
+  - type: input
+    id: version
+    attributes: { label: Seekr version or commit }
+    validations: { required: true }
+  - type: textarea
+    id: reproduction
+    attributes:
+      {
+        label: Minimal reproduction,
+        description: Include schema,
+        documents,
+        query,
+        and commands with secrets removed.,
+      }
+    validations: { required: true }
+  - type: textarea
+    id: environment
+    attributes:
+      { label: Environment, description: OS, Node, pnpm, Docker, PostgreSQL, and Redis versions. }
+    validations: { required: true }
+  - type: textarea
+    id: logs
+    attributes: { label: Relevant logs, render: shell }

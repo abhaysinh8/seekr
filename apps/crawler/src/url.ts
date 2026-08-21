@@ -7,6 +7,13 @@ const PRIVATE_IPV4 = [
   /^192\.168\./u,
   /^172\.(?:1[6-9]|2\d|3[01])\./u,
   /^0\./u,
+  /^100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./u,
+  /^198\.(?:1[89])\./u,
+  /^192\.0\.0\./u,
+  /^192\.0\.2\./u,
+  /^198\.51\.100\./u,
+  /^203\.0\.113\./u,
+  /^(?:22[4-9]|23\d)\./u,
 ];
 
 export function normalizeUrl(value: string, baseUrl?: string): string | undefined {
@@ -41,16 +48,25 @@ export function isAllowedDomain(urlValue: string, allowedDomains: ReadonlySet<st
 export function isPrivateNetworkUrl(urlValue: string): boolean {
   const hostname = new URL(urlValue).hostname.toLowerCase().replace(/^\[|\]$/gu, '');
   if (hostname === 'localhost' || hostname.endsWith('.localhost')) return true;
-  const ipVersion = isIP(hostname);
-  if (ipVersion === 4) return PRIVATE_IPV4.some((pattern) => pattern.test(hostname));
-  if (ipVersion === 6) {
+  return isPrivateNetworkAddress(hostname);
+}
+
+export function isPrivateNetworkAddress(address: string): boolean {
+  const normalized = address.toLowerCase().replace(/^\[|\]$/gu, '');
+  const ipVersion = isIP(normalized);
+  if (ipVersion === 4)
     return (
-      hostname === '::1' ||
-      hostname === '::' ||
-      hostname.startsWith('fc') ||
-      hostname.startsWith('fd') ||
-      hostname.startsWith('fe8')
+      PRIVATE_IPV4.some((pattern) => pattern.test(normalized)) || normalized === '255.255.255.255'
     );
-  }
+  if (ipVersion === 6)
+    return (
+      normalized === '::1' ||
+      normalized === '::' ||
+      normalized.startsWith('fc') ||
+      normalized.startsWith('fd') ||
+      /^fe[89ab]/u.test(normalized) ||
+      normalized.startsWith('ff') ||
+      normalized.startsWith('2001:db8:')
+    );
   return false;
 }

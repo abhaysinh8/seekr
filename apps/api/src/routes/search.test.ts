@@ -51,6 +51,45 @@ const createFixture = async () => {
 };
 
 describe('search REST API', () => {
+  it('returns explicit spelling metadata and applies correction only after zero results', async () => {
+    const indexes = new InMemoryIndexService();
+    indexes.createIndex(indexId, {
+      fields: { title: { searchable: true } },
+      synonyms: [{ source: 'js', targets: ['javascript'] }],
+      synonymPenalty: 0.5,
+    });
+    indexes.addDocuments(indexId, [
+      { id: 'machine', fields: { title: 'Machine learning' } },
+      { id: 'js', fields: { title: 'js' } },
+      { id: 'javascript', fields: { title: 'javascript' } },
+    ]);
+    const app = await buildApp({
+      dependencies: { cache: healthyDependency(), database: healthyDependency(), indexes },
+      environment: { CORS_ORIGIN: 'http://localhost:3000' },
+    });
+    const corrected = await app.inject({
+      method: 'POST',
+      url: `/v1/indexes/${indexId}/search`,
+      payload: { query: 'machien lerning', spellCorrection: true },
+    });
+    expect(corrected.json()).toMatchObject({
+      correction: {
+        originalQuery: 'machien lerning',
+        correctedQuery: 'machine learning',
+        correctionApplied: true,
+      },
+      hits: [{ documentId: 'machine' }],
+    });
+    const synonyms = await app.inject({
+      method: 'POST',
+      url: `/v1/indexes/${indexId}/search`,
+      payload: { query: 'js', explain: true },
+    });
+    expect(
+      synonyms.json<{ hits: Array<{ documentId: string }> }>().hits.map((hit) => hit.documentId),
+    ).toEqual(['js', 'javascript']);
+  });
+
   it('exposes ranking, filters, facets, fields, highlights, and explain mode', async () => {
     const { app } = await createFixture();
     const response = await app.inject({

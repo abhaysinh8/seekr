@@ -1,0 +1,6 @@
+{
+  "extends": "../../config/typescript/node.json",
+  "compilerOptions": { "outDir": "dist", "rootDir": "src", "composite": true },
+  "include": ["src/**/*.ts"],
+  "references": [{ "path": "../shared" }]
+}

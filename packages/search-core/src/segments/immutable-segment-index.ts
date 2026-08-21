@@ -120,6 +120,20 @@ export class ImmutableSegmentIndex {
     return undefined;
   }
 
+  public getDocuments(): readonly SearchDocument[] {
+    const documents = new Map<string, SearchDocument>();
+    for (const segment of [...this.#segments].sort(
+      (left, right) => left.descriptor.generation - right.descriptor.generation,
+    )) {
+      for (const document of segment.index.getDocuments()) {
+        if (this.isVisible(document.id, segment.descriptor.generation))
+          documents.set(document.id, document);
+      }
+    }
+    for (const document of this.#active.getDocuments()) documents.set(document.id, document);
+    return [...documents.values()];
+  }
+
   public async flush(): Promise<SegmentDescriptor | undefined> {
     const documents = this.#active.getDocuments();
     if (documents.length === 0) return undefined;
