@@ -1,0 +1,8 @@
+E:\qa\seekr\.github\ISSUE_TEMPLATE\bug_report.yml
+E:\qa\seekr\.github\ISSUE_TEMPLATE\feature_request.yml
+E:\qa\seekr\.github\PULL_REQUEST_TEMPLATE.md
+E:\qa\seekr\.github\copilot-instructions.md
+E:\qa\seekr\.github\workflows\benchmark.yml
+E:\qa\seekr\.github\workflows\ci.yml
+E:\qa\seekr\docker-compose.yml
+E:\qa\seekr\pnpm-workspace.yaml

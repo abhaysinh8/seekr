@@ -16,6 +16,7 @@
     "README.md"
   ],
   "scripts": {
+    "prebenchmark": "pnpm --filter @seekr/tokenizer build",
     "benchmark": "tsx src/benchmarks/performance.bench.ts",
     "build": "tsc -b",
     "clean": "rimraf dist tsconfig.tsbuildinfo",
