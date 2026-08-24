@@ -13,3 +13,5 @@ load-test-results.json
 pnpm-debug.log*
 .DS_Store
 Thumbs.db
+.github/copilot-instructions.md
+graphify-out/
