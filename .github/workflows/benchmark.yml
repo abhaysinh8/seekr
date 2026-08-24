@@ -25,6 +25,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm benchmark
         env:
+          NODE_OPTIONS: --max-old-space-size=4096
           SEEKR_BENCHMARK_SIZES: 1000,10000,100000
       - uses: actions/upload-artifact@v4
         with:

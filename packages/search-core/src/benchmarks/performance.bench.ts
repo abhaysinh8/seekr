@@ -6,6 +6,7 @@ import { tokenize } from '@seekr/tokenizer';
 import { SearchIndex } from '../search-engine.js';
 import { FileSystemSegmentStore } from '../segments/file-system-store.js';
 import { ImmutableSegmentIndex } from '../segments/immutable-segment-index.js';
+import type { IndexConfiguration, SearchDocument } from '../types.js';
 import { createSyntheticDocuments } from './fixtures.js';
 
 interface Distribution {
@@ -33,7 +34,22 @@ const results: BenchmarkResult[] = [];
 
 for (const size of sizes) {
   const documents = createSyntheticDocuments(size);
+  collectGarbage();
   const beforeMemory = process.memoryUsage().heapUsed;
+  process.stdout.write(`\nBenchmarking ${size.toLocaleString()} documents\n`);
+  const metrics = benchmarkSearch(documents);
+  const memoryDeltaBytes = Math.max(0, process.memoryUsage().heapUsed - beforeMemory);
+
+  // SearchIndex retains documents and postings. End that phase and collect it before creating
+  // another full index for segment persistence, keeping large benchmark runs within one heap.
+  collectGarbage();
+  Object.assign(metrics, await benchmarkPersistence(documents));
+
+  results.push({ documents: size, memoryDeltaBytes, metrics });
+  collectGarbage();
+}
+
+function benchmarkSearch(documents: readonly SearchDocument[]): Record<string, Distribution> {
   const index = new SearchIndex({
     fields: {
       title: { searchable: true, weight: 3 },
@@ -43,6 +59,7 @@ for (const size of sizes) {
     },
   });
   const metrics: Record<string, Distribution> = {};
+  const size = documents.length;
   metrics.tokenization = measure(
     () => {
       for (const document of documents) tokenize(String(document.fields.body));
@@ -76,35 +93,59 @@ for (const size of sizes) {
     () => void index.search('machien serch', { typoTolerance: true, limit: 10 }),
     Math.max(10, Math.floor(iterations / 2)),
   );
+  return metrics;
+}
 
+async function benchmarkPersistence(
+  documents: readonly SearchDocument[],
+): Promise<Record<string, Distribution>> {
+  const metrics: Record<string, Distribution> = {};
   const temporaryDirectory = await mkdtemp(path.join(tmpdir(), 'seekr-benchmark-'));
   try {
-    const configuration = { fields: { title: { searchable: true }, body: { searchable: true } } };
-    const segmented = await ImmutableSegmentIndex.open(
-      new FileSystemSegmentStore(temporaryDirectory),
-      { configuration },
-    );
-    const persistenceStarted = performance.now();
-    await segmented.addDocuments(documents);
-    await segmented.flush();
-    metrics.indexPersistence = summarize([performance.now() - persistenceStarted], size);
+    const configuration: IndexConfiguration = {
+      fields: { title: { searchable: true }, body: { searchable: true } },
+    };
+    const persistenceMs = await persistIndex(temporaryDirectory, documents, configuration);
+    metrics.indexPersistence = summarize([persistenceMs], documents.length);
+    collectGarbage();
+
     const restorationSamples: number[] = [];
     for (let iteration = 0; iteration < 3; iteration += 1) {
-      const started = performance.now();
-      await ImmutableSegmentIndex.open(new FileSystemSegmentStore(temporaryDirectory), {
-        configuration,
-      });
-      restorationSamples.push(performance.now() - started);
+      restorationSamples.push(await restoreIndex(temporaryDirectory, configuration));
+      collectGarbage();
     }
     metrics.indexRestoration = summarize(restorationSamples, 3);
   } finally {
     await rm(temporaryDirectory, { recursive: true, force: true });
   }
-  results.push({
-    documents: size,
-    memoryDeltaBytes: Math.max(0, process.memoryUsage().heapUsed - beforeMemory),
-    metrics,
+  return metrics;
+}
+
+async function persistIndex(
+  directory: string,
+  documents: readonly SearchDocument[],
+  configuration: IndexConfiguration,
+): Promise<number> {
+  const segmented = await ImmutableSegmentIndex.open(new FileSystemSegmentStore(directory), {
+    configuration,
   });
+  const started = performance.now();
+  await segmented.addDocuments(documents);
+  await segmented.flush();
+  return performance.now() - started;
+}
+
+async function restoreIndex(directory: string, configuration: IndexConfiguration): Promise<number> {
+  const started = performance.now();
+  const restored = await ImmutableSegmentIndex.open(new FileSystemSegmentStore(directory), {
+    configuration,
+  });
+  if (restored.segmentCount === 0) throw new Error('Persisted benchmark segment was not restored');
+  return performance.now() - started;
+}
+
+function collectGarbage(): void {
+  globalThis.gc?.();
 }
 
 const report = {
